@@ -1,33 +1,54 @@
 
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { SidebarLeft } from './components/SidebarLeft';
-import { SidebarRight } from './components/SidebarRight';
 import { Court } from './components/Court';
-import { Auth } from './components/Auth';
 import { FeedbackModal } from './components/FeedbackModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { TutorialModal } from './components/TutorialModal';
-import { CourtItem, ItemType, LineItem, LineType, Note, PlayerColor, User, PlayerPath } from './types';
-import { INITIAL_ITEMS, INITIAL_FOCUS_POINTS, MAX_PLAYERS, MAX_MARKERS, MAX_SHUTTLES, DEFAULT_LINE_COLOR, DEFAULT_LINE_TYPE, PLAYER_ORDER_COLORS, PRESET_LAYOUTS } from './constants';
+import { CourtItem, ItemType, LineItem, LineType, PlayerPath, PlayerColor } from './types';
+import { MAX_PLAYERS, MAX_MARKERS, MAX_SHUTTLES, DEFAULT_LINE_COLOR, DEFAULT_LINE_TYPE, PLAYER_ORDER_COLORS, PRESET_LAYOUTS } from './constants';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
-
   // State for strategy metadata and locking
   const [strategyName, setStrategyName] = useState('Badminton Tactics');
   const [isLocked, setIsLocked] = useState(false);
+  const courtRef = useRef<HTMLDivElement>(null);
 
+  // Initialize items with Doubles Serve Even preset
   const [items, setItems] = useState<CourtItem[]>(() => {
-    return INITIAL_ITEMS.map(item => ({...item, id: generateId()}));
+    // @ts-ignore
+    const preset = PRESET_LAYOUTS['MD_SERVE_EVEN'];
+    if (!preset) return [];
+
+    const newItems: CourtItem[] = [];
+    
+    preset.forEach((p: any) => {
+        newItems.push({
+            id: generateId(),
+            type: ItemType.PLAYER,
+            position: p.position,
+            color: p.color,
+            label: p.label
+        });
+
+        if (p.withShuttle) {
+            newItems.push({
+                id: generateId(),
+                type: ItemType.SHUTTLE,
+                position: { x: p.position.x + 4, y: p.position.y - 1.5 },
+                label: ''
+            });
+        }
+    });
+    return newItems;
   });
   
   const [lines, setLines] = useState<LineItem[]>([]);
   const [paths, setPaths] = useState<PlayerPath[]>([]);
   
-  const [notes, setNotes] = useState<string>('');
-  const [focusPoints, setFocusPoints] = useState<Note[]>(INITIAL_FOCUS_POINTS);
+  // @ts-ignore - draggedType kept for potential future use or prop drilling if needed
   const [draggedType, setDraggedType] = useState<ItemType | null>(null);
   
   // Active Line State
@@ -36,9 +57,6 @@ const App: React.FC = () => {
 
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
-  
-  // Right Sidebar (Commentary) State - Default Closed
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false);
   
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
   
@@ -73,35 +91,6 @@ const App: React.FC = () => {
     const slotIndex = Math.min(Math.max(nextSlot, 1), MAX_PLAYERS) - 1;
     return PLAYER_ORDER_COLORS[slotIndex];
   }, [items]);
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem('bsb_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    
-    // Check if tutorial should be shown
-    const tutorialSeen = localStorage.getItem('bsb_tutorial_seen');
-    if (!tutorialSeen && storedUser) {
-        setIsTutorialOpen(true);
-    }
-  }, []);
-
-  const handleLogin = (newUser: User) => {
-    setUser(newUser);
-    localStorage.setItem('bsb_user', JSON.stringify(newUser));
-    
-    // Check tutorial on login as well
-    const tutorialSeen = localStorage.getItem('bsb_tutorial_seen');
-    if (!tutorialSeen) {
-        setIsTutorialOpen(true);
-    }
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-    localStorage.removeItem('bsb_user');
-  };
 
   const handleDragStart = (e: React.DragEvent, type: ItemType) => {
     if (isLocked) {
@@ -328,7 +317,8 @@ const App: React.FC = () => {
              newItems.push({
                  id: generateId(),
                  type: ItemType.SHUTTLE,
-                 position: { x: p.position.x + 4, y: p.position.y - 1.5 }
+                 position: { x: p.position.x + 4, y: p.position.y - 1.5 },
+                 label: ''
              });
          }
      });
@@ -345,33 +335,6 @@ const App: React.FC = () => {
     e.preventDefault();
   };
 
-  const toggleFocusPoint = (id: string) => {
-    setFocusPoints(prev => prev.map(p => 
-      p.id === id ? { ...p, completed: !p.completed } : p
-    ));
-  };
-
-  // Add new Focus Point
-  const handleAddFocusPoint = () => {
-    setFocusPoints(prev => [...prev, { id: generateId(), text: 'New key point', completed: false }]);
-  };
-
-  // Update Focus Point Text
-  const handleUpdateFocusPoint = (id: string, newText: string) => {
-    setFocusPoints(prev => prev.map(p => 
-        p.id === id ? { ...p, text: newText } : p
-    ));
-  };
-
-  // Delete Focus Point
-  const handleDeleteFocusPoint = (id: string) => {
-      setFocusPoints(prev => prev.filter(p => p.id !== id));
-  };
-
-  if (!user) {
-    return <Auth onLogin={handleLogin} />;
-  }
-
   return (
     <div className="flex h-screen w-full bg-[#0d120f] overflow-hidden">
       <SidebarLeft 
@@ -381,9 +344,6 @@ const App: React.FC = () => {
         onClearPlayers={handleClearPlayers}
         onClearMarkers={handleClearMarkers}
         onOpenFeedback={() => setIsFeedbackOpen(true)}
-        onToggleNotes={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-        onLogout={handleLogout}
-        isNotesOpen={isRightSidebarOpen}
         playerCount={playerCount}
         markerCount={markerCount}
         shuttleCount={shuttleCount}
@@ -403,6 +363,7 @@ const App: React.FC = () => {
       
       <main className="flex-grow flex flex-col relative transition-all duration-300">
         <Court 
+          ref={courtRef}
           items={items} 
           lines={lines}
           paths={paths}
@@ -422,18 +383,6 @@ const App: React.FC = () => {
           isLocked={isLocked}
         />
       </main>
-
-      <SidebarRight 
-        notes={notes}
-        setNotes={setNotes}
-        focusPoints={focusPoints}
-        toggleFocusPoint={toggleFocusPoint}
-        onAddPoint={handleAddFocusPoint}
-        onUpdatePoint={handleUpdateFocusPoint}
-        onDeletePoint={handleDeleteFocusPoint}
-        isOpen={isRightSidebarOpen}
-        onClose={() => setIsRightSidebarOpen(false)}
-      />
 
       <FeedbackModal 
         isOpen={isFeedbackOpen} 

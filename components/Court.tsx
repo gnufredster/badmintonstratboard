@@ -1,5 +1,5 @@
 
-import React, { useRef, useState, useEffect, useMemo } from 'react';
+import React, { useRef, useState, useEffect, useMemo, forwardRef, useImperativeHandle, useLayoutEffect } from 'react';
 import { CourtItem, ItemType, LineItem, LineType, PlayerPath, Position } from '../types';
 import { LINE_COLORS } from '../constants';
 
@@ -35,14 +35,8 @@ type InteractionMode =
   | { type: 'DRAG_PATH_END'; pathId: string; initialEndPos: Position; initialMousePos: Position };
 
 // Standard Badminton Court Dimensions (BWF)
-// Length: 13.40m
-// Width: 6.10m
 const COURT_WIDTH_M = 6.10;
 const COURT_LENGTH_M = 13.40;
-
-// Margin & Stand Configuration (Percentages relative to court width/height)
-const MARGIN_X_PCT = 12; // Matches the stand width
-const MARGIN_Y_PCT = 5;  // Reduced to save screen estate
 
 // Percentage Calculations for exact BWF positioning
 const PCT_SINGLES_SIDE = 7.541;
@@ -67,16 +61,21 @@ const getHexColor = (bgClass?: string) => {
     return '#2563eb';
 };
 
-const getLineIntensity = (start: Position, end: Position): string => {
+// Returns pixel width for line stroke based on court width
+const getLineStrokeWidth = (start: Position, end: Position, courtWidthPx: number): number => {
     const dx = (end.x - start.x) * 0.061;
     const dy = (end.y - start.y) * 0.134; 
     const distMeters = Math.sqrt(dx*dx + dy*dy);
     const maxDist = 14; 
     const normalizedDist = Math.min(distMeters / maxDist, 1);
     const intensity = Math.pow(normalizedDist, 0.8);
-    const minWidth = 0.4; 
-    const maxWidth = 1.2; 
-    return `${minWidth + (intensity * (maxWidth - minWidth))}cqw`;
+    
+    // Base width related to court width (e.g., 0.4% to 1.2% of court width)
+    const minPct = 0.004; 
+    const maxPct = 0.012;
+    const pct = minPct + (intensity * (maxPct - minPct));
+    
+    return Math.max(1, courtWidthPx * pct);
 };
 
 const EditableLabel = ({ value, onChange, className, style, disabled }: { value: string, onChange: (val: string) => void, className?: string, style?: React.CSSProperties, disabled?: boolean }) => {
@@ -104,15 +103,19 @@ const EditableLabel = ({ value, onChange, className, style, disabled }: { value:
         }
     };
   
-    // Base classes include h-[20px] and strict leading-none to prevent height jumps
-    const baseClasses = `font-bold font-display text-center text-[12px] leading-none m-0 px-1 h-[20px] flex items-center justify-center`;
+    // Removed flex, using inline-block for better text alignment/wrapping support in screenshots
+    const baseClasses = `font-bold font-display text-center m-0 border-0 outline-none appearance-none`;
     
-    // Explicit styles to ensure box model match
     const commonStyle = {
         ...style,
         pointerEvents: 'auto' as const,
-        minWidth: '24px',
+        minWidth: '1.5em',
+        display: 'inline-block',
+        padding: '1px 4px', // Tight padding
+        borderRadius: '4px',
+        lineHeight: '1.2', 
         boxSizing: 'border-box' as const,
+        verticalAlign: 'middle',
     };
 
     if (isEditing && !disabled) {
@@ -123,11 +126,10 @@ const EditableLabel = ({ value, onChange, className, style, disabled }: { value:
               onChange={e => setTempValue(e.target.value)}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
-              className={`${baseClasses} bg-transparent text-white outline-none appearance-none border border-transparent ${className}`}
+              className={`${baseClasses} bg-transparent text-white ${className}`}
               style={{
                   ...commonStyle,
                   width: `${Math.max(2, tempValue.length + 1)}ch`,
-                  boxShadow: 'none',
               }}
               onClick={e => e.stopPropagation()} 
               onDoubleClick={e => e.stopPropagation()}
@@ -144,15 +146,18 @@ const EditableLabel = ({ value, onChange, className, style, disabled }: { value:
                   setIsEditing(true); 
               }
           }}
-          className={`${baseClasses} transition-all border border-transparent ${!disabled ? 'cursor-text hover:bg-black/20 rounded' : 'cursor-default'} ${className}`}
-          style={commonStyle}
+          className={`${baseClasses} transition-all border border-transparent ${!disabled ? 'cursor-text hover:bg-black/20' : 'cursor-default'} ${className}`}
+          style={{
+              ...commonStyle,
+              whiteSpace: 'nowrap'
+          }}
         >
             {value}
         </span>
     );
 };
 
-export const Court: React.FC<CourtProps> = ({ 
+export const Court = forwardRef<HTMLDivElement, CourtProps>(({ 
     items, 
     lines,
     paths = [],
@@ -170,22 +175,50 @@ export const Court: React.FC<CourtProps> = ({
     activeLineColor,
     activeLineType,
     isLocked,
-}) => {
-  const courtRef = useRef<HTMLDivElement>(null);
+}, ref) => {
+  // Internal ref for the play area (grid)
+  const internalRef = useRef<HTMLDivElement>(null);
+  // Wrapper ref for screenshot (includes stands)
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  
+  // Expose the wrapper ref to the parent for screenshots
+  useImperativeHandle(ref, () => wrapperRef.current!);
+
   const [interaction, setInteraction] = useState<InteractionMode>({ type: 'IDLE' });
   const [drawingLine, setDrawingLine] = useState<{start: {x: number, y: number}, end: {x: number, y: number}} | null>(null);
+  const [courtWidth, setCourtWidth] = useState(0);
+
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attachedShuttlesRef = useRef<{id: string, initialPos: Position}[]>([]);
 
-  // Explicit pixel sizes matching SidebarLeft
-  const itemSize = '40px';
-  const shuttleSize = '22px'; // Reduced to 22px
-  const markerCircleSize = '23px'; // Increased to 23px
+  // Measure court width for dynamic sizing
+  useLayoutEffect(() => {
+      const updateWidth = () => {
+          if (internalRef.current) {
+              setCourtWidth(internalRef.current.getBoundingClientRect().width);
+          }
+      };
+      
+      const observer = new ResizeObserver(updateWidth);
+      if (internalRef.current) {
+          updateWidth(); // Initial
+          observer.observe(internalRef.current);
+      }
+      return () => observer.disconnect();
+  }, []);
+
+  // Dynamic Sizing based on court width
+  // Base scaling factor: 400px wide court -> 1.0
+  const scale = courtWidth > 0 ? courtWidth / 400 : 1;
+
+  const itemSizePx = Math.max(24, 40 * scale);
+  const shuttleSizePx = Math.max(14, 22 * scale);
+  const markerSizePx = Math.max(14, 23 * scale);
+  const ghostSizePx = Math.max(24, 40 * scale);
   
-  const markerFontSize = '10px'; // Increased font size
-  const labelFontSize = '12px';
-  const lineHandleSize = '20px'; 
-  const ghostSize = '40px';
+  const markerFontSizePx = Math.max(8, 10 * scale);
+  const labelFontSizePx = Math.max(10, 12 * scale);
+  const lineHandleSizePx = Math.max(12, 20 * scale);
 
   const pathMetadata = useMemo(() => {
     const meta: Record<string, { depth: number, rootPlayerId: string }> = {};
@@ -200,8 +233,8 @@ export const Court: React.FC<CourtProps> = ({
   }, [paths]);
 
   const getPercentagePos = (e: MouseEvent | React.MouseEvent) => {
-      if (!courtRef.current) return { x: 0, y: 0 };
-      const rect = courtRef.current.getBoundingClientRect();
+      if (!internalRef.current) return { x: 0, y: 0 };
+      const rect = internalRef.current.getBoundingClientRect();
       let x = ((e.clientX - rect.left) / rect.width) * 100;
       let y = ((e.clientY - rect.top) / rect.height) * 100;
       return {
@@ -460,7 +493,7 @@ export const Court: React.FC<CourtProps> = ({
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-        if (!courtRef.current || isLocked) return;
+        if (!internalRef.current || isLocked) return;
         const pos = getPercentagePos(e);
 
         if (interaction.type !== 'IDLE') {
@@ -500,7 +533,7 @@ export const Court: React.FC<CourtProps> = ({
             setInteraction(prev => ({ ...prev, currentEnd: pos } as InteractionMode));
         }
         else if (interaction.type === 'DRAG_PATH_END') {
-            const rect = courtRef.current.getBoundingClientRect();
+            const rect = internalRef.current.getBoundingClientRect();
             const deltaX = (e.clientX - interaction.initialMousePos.x) / rect.width * 100;
             const deltaY = (e.clientY - interaction.initialMousePos.y) / rect.height * 100;
             const newPos = {
@@ -522,7 +555,7 @@ export const Court: React.FC<CourtProps> = ({
             }
         }
         else if (interaction.type === 'DRAG_ITEM') {
-            const rect = courtRef.current.getBoundingClientRect();
+            const rect = internalRef.current.getBoundingClientRect();
             const deltaX = (e.clientX - interaction.initialMousePos.x) / rect.width * 100;
             const deltaY = (e.clientY - interaction.initialMousePos.y) / rect.height * 100;
             
@@ -657,395 +690,394 @@ export const Court: React.FC<CourtProps> = ({
 
   return (
     <div className="flex-1 relative flex items-center justify-center p-2 overflow-hidden bg-[#0d120f] transition-all duration-500 w-full h-full">
+        {/* Wrapper for capturing Screenshot (Includes Stands) */}
         <div 
-          ref={courtRef}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onMouseDown={handleBackgroundMouseDown}
-          style={{ 
-              aspectRatio: '6.1/13.4',
-              height: '90%',
-              maxHeight: '90%',
-              maxWidth: '80%' 
-          }}
-          className={`relative z-10 court-lines select-none touch-none transition-all duration-500 origin-center @container ${isLocked ? 'cursor-default' : ''}`}
-        >
-             <div 
-                className="absolute bg-court-green -z-20 shadow-2xl rounded-sm"
-                style={{
-                    left: `-${MARGIN_X_PCT}%`,
-                    right: `-${MARGIN_X_PCT}%`,
-                    top: `-${MARGIN_Y_PCT}%`,
-                    bottom: `-${MARGIN_Y_PCT}%`,
-                }}
-             ></div>
-
-            <div 
-            className="absolute inset-0 pointer-events-none z-0 bg-court-green" 
-            style={{
-                backgroundImage: `
-                    linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), 
-                    linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)
-                `,
-                backgroundSize: `${GRID_SIZE_X}% ${GRID_SIZE_Y}%`
+            ref={wrapperRef}
+            className="relative flex items-center justify-center bg-court-green shadow-2xl @container"
+            style={{ 
+                // Aspect Ratio including Stands
+                aspectRatio: '7.564/14.74',
+                height: '95%',
+                maxHeight: '95%',
+                maxWidth: '90%',
+                // Padding simulates the stands area
+                padding: '4.55% 9.68%'
             }}
-            ></div>
+        >
+            <div 
+                ref={internalRef}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+                onMouseDown={handleBackgroundMouseDown}
+                className={`relative w-full h-full z-10 court-lines select-none touch-none transition-all duration-500 origin-center ${isLocked ? 'cursor-default' : ''}`}
+            >
+                <div 
+                    className="absolute inset-0 pointer-events-none z-0 bg-court-green" 
+                    style={{
+                        backgroundImage: `
+                            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), 
+                            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)
+                        `,
+                        backgroundSize: `${GRID_SIZE_X}% ${GRID_SIZE_Y}%`
+                    }}
+                ></div>
 
-            <div className="absolute top-0 left-0 right-0 h-[3px] bg-white/90 z-20 pointer-events-none"></div>
-            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/90 z-20 pointer-events-none"></div>
-            <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-white/90 z-20 pointer-events-none"></div>
-            <div className="absolute top-0 bottom-0 right-0 w-[3px] bg-white/90 z-20 pointer-events-none"></div>
-            <div className="absolute top-0 bottom-0 w-[3px] bg-white/90 z-0 pointer-events-none" style={{ left: `${PCT_SINGLES_SIDE}%` }}></div>
-            <div className="absolute top-0 bottom-0 w-[3px] bg-white/90 z-0 pointer-events-none" style={{ right: `${PCT_SINGLES_SIDE}%` }}></div>
-            <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ top: `${PCT_DOUBLES_LONG_SVC}%` }}></div>
-            <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ bottom: `${PCT_DOUBLES_LONG_SVC}%` }}></div>
-            <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ top: `${PCT_SHORT_SVC}%` }}></div>
-            <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ bottom: `${PCT_SHORT_SVC}%` }}></div>
-            <div className="absolute w-[3px] bg-white/90 left-1/2 -translate-x-1/2 z-0 pointer-events-none" style={{ top: 0, height: `${PCT_SHORT_SVC}%` }}></div>
-            <div className="absolute w-[3px] bg-white/90 left-1/2 -translate-x-1/2 z-0 pointer-events-none" style={{ bottom: 0, height: `${PCT_SHORT_SVC}%` }}></div>
-            
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full z-40 shadow-sm -translate-x-1/2"></div>
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full z-40 shadow-sm translate-x-1/2"></div>
-            
-            {/* NET VISUALIZATION: Lowered Z-Index to allow lines to be drawn on top */}
-            <div className="absolute left-0 right-0 top-1/2 flex items-center justify-between z-15 pointer-events-none -translate-y-1/2">
-                 <div className="absolute right-[100%] flex items-center justify-end h-8 md:h-10" style={{ width: `${MARGIN_X_PCT}%` }}>
-                     <div className="w-[80%] h-full bg-[#003366] rounded-sm shadow-xl relative z-10 flex items-center justify-center border-t border-blue-400/20">
-                        <div className="w-1/2 h-1 bg-white/20 rounded-full"></div>
-                     </div>
-                     <div className="w-[20%] h-2 bg-[#004e8a] relative z-10"></div>
-                 </div>
-                 <div className="w-full h-[6px] bg-white/95 shadow-sm relative z-30"
-                    style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px)' }}
-                 ></div>
-                 <div className="absolute left-[100%] flex items-center justify-start h-8 md:h-10" style={{ width: `${MARGIN_X_PCT}%` }}>
-                     <div className="w-[20%] h-2 bg-[#004e8a] relative z-10"></div>
-                     <div className="w-[80%] h-full bg-[#003366] rounded-sm shadow-xl relative z-10 flex items-center justify-center border-t border-blue-400/20">
-                         <div className="w-1/2 h-1 bg-white/20 rounded-full"></div>
-                     </div>
-                 </div>
-            </div>
-
-            {/* SVG Layer: Raised Z-Index to appear ABOVE the Net (z-20 vs Net's z-15) */}
-            <svg className="absolute inset-0 w-full h-full z-20 overflow-visible pointer-events-none">
-                <defs>
-                    {LINE_COLORS.map(color => (
-                        <marker key={color} id={`arrowhead-${color}`} markerHeight="4" markerWidth="6" orient="auto" refX="5" refY="2">
-                            <polygon fill={color} points="0 0, 6 2, 0 4"></polygon>
-                        </marker>
-                    ))}
-                </defs>
+                <div className="absolute top-0 left-0 right-0 h-[3px] bg-white/90 z-20 pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-white/90 z-20 pointer-events-none"></div>
+                <div className="absolute top-0 bottom-0 left-0 w-[3px] bg-white/90 z-20 pointer-events-none"></div>
+                <div className="absolute top-0 bottom-0 right-0 w-[3px] bg-white/90 z-20 pointer-events-none"></div>
+                <div className="absolute top-0 bottom-0 w-[3px] bg-white/90 z-0 pointer-events-none" style={{ left: `${PCT_SINGLES_SIDE}%` }}></div>
+                <div className="absolute top-0 bottom-0 w-[3px] bg-white/90 z-0 pointer-events-none" style={{ right: `${PCT_SINGLES_SIDE}%` }}></div>
+                <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ top: `${PCT_DOUBLES_LONG_SVC}%` }}></div>
+                <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ bottom: `${PCT_DOUBLES_LONG_SVC}%` }}></div>
+                <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ top: `${PCT_SHORT_SVC}%` }}></div>
+                <div className="absolute left-0 right-0 h-[3px] bg-white/90 z-0 pointer-events-none" style={{ bottom: `${PCT_SHORT_SVC}%` }}></div>
+                <div className="absolute w-[3px] bg-white/90 left-1/2 -translate-x-1/2 z-0 pointer-events-none" style={{ top: 0, height: `${PCT_SHORT_SVC}%` }}></div>
+                <div className="absolute w-[3px] bg-white/90 left-1/2 -translate-x-1/2 z-0 pointer-events-none" style={{ bottom: 0, height: `${PCT_SHORT_SVC}%` }}></div>
                 
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full z-40 shadow-sm -translate-x-1/2"></div>
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full z-40 shadow-sm translate-x-1/2"></div>
+                
+                {/* NET VISUALIZATION: Lowered Z-Index to allow lines to be drawn on top */}
+                <div className="absolute left-0 right-0 top-1/2 flex items-center justify-between z-15 pointer-events-none -translate-y-1/2">
+                    <div className="absolute right-[100%] flex items-center justify-end h-8 md:h-10 w-[12%]">
+                        <div className="w-[80%] h-full bg-[#003366] rounded-sm shadow-xl relative z-10 flex items-center justify-center border-t border-blue-400/20">
+                            <div className="w-1/2 h-1 bg-white/20 rounded-full"></div>
+                        </div>
+                        <div className="w-[20%] h-2 bg-[#004e8a] relative z-10"></div>
+                    </div>
+                    <div className="w-full h-[6px] bg-white/95 shadow-sm relative z-30"
+                        style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px)' }}
+                    ></div>
+                    <div className="absolute left-[100%] flex items-center justify-start h-8 md:h-10 w-[12%]">
+                        <div className="w-[20%] h-2 bg-[#004e8a] relative z-10"></div>
+                        <div className="w-[80%] h-full bg-[#003366] rounded-sm shadow-xl relative z-10 flex items-center justify-center border-t border-blue-400/20">
+                            <div className="w-1/2 h-1 bg-white/20 rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* SVG Layer: Raised Z-Index to appear ABOVE the Net (z-20 vs Net's z-15) */}
+                <svg className="absolute inset-0 w-full h-full z-20 overflow-visible pointer-events-none">
+                    <defs>
+                        {LINE_COLORS.map(color => (
+                            <marker key={color} id={`arrowhead-${color}`} markerHeight="4" markerWidth="6" orient="auto" refX="5" refY="2">
+                                <polygon fill={color} points="0 0, 6 2, 0 4"></polygon>
+                            </marker>
+                        ))}
+                    </defs>
+                    
+                    {paths.map(path => {
+                        const startPos = resolvePosition(path.sourceId, path.sourceType);
+                        if (!startPos) return null;
+                        const meta = pathMetadata[path.id];
+                        const player = items.find(i => i.id === meta?.rootPlayerId);
+                        const strokeColor = player ? getHexColor(player.color) : '#4b5563';
+
+                        return (
+                            <g key={path.id}>
+                                <line 
+                                    x1={`${startPos.x}%`} y1={`${startPos.y}%`} 
+                                    x2={`${path.endPosition.x}%`} y2={`${path.endPosition.y}%`}
+                                    stroke={strokeColor} 
+                                    strokeWidth={3 * scale}
+                                    strokeDasharray={`${6 * scale}, ${6 * scale}`}
+                                    markerEnd={`url(#arrowhead-${strokeColor})`}
+                                    opacity="0.9"
+                                />
+                            </g>
+                        );
+                    })}
+
+                    {interaction.type === 'CREATING_PATH' && (() => {
+                        const startPos = resolvePosition(interaction.sourceId, interaction.sourceType);
+                        if (!startPos) return null;
+                        let strokeColor = '#ffffff';
+                        if (interaction.sourceType === 'PLAYER') {
+                            const player = items.find(i => i.id === interaction.sourceId);
+                            if (player) strokeColor = getHexColor(player.color);
+                        } else {
+                            const meta = pathMetadata[interaction.sourceId];
+                            const player = items.find(i => i.id === meta?.rootPlayerId);
+                            if (player) strokeColor = getHexColor(player.color);
+                        }
+
+                        return (
+                            <g>
+                                <line 
+                                    x1={`${startPos.x}%`} y1={`${startPos.y}%`} 
+                                    x2={`${interaction.currentEnd.x}%`} y2={`${interaction.currentEnd.y}%`}
+                                    stroke={strokeColor} 
+                                    strokeWidth={3 * scale}
+                                    strokeDasharray={`${6 * scale}, ${6 * scale}`}
+                                    markerEnd={`url(#arrowhead-${strokeColor})`}
+                                    opacity="0.9"
+                                />
+                            </g>
+                        );
+                    })()}
+
+                    {lines.map(line => {
+                        const strokeColor = line.color || '#4b5563';
+                        const dashArray = line.type === LineType.DASHED ? `${12 * scale}, ${12 * scale}` : "none";
+                        const strokeWidth = getLineStrokeWidth(line.start, line.end, courtWidth);
+                        return (
+                            <g key={line.id} className={!isLocked ? "pointer-events-auto" : "pointer-events-none"}>
+                                <line 
+                                    x1={`${line.start.x}%`} y1={`${line.start.y}%`} 
+                                    x2={`${line.end.x}%`} y2={`${line.end.y}%`}
+                                    stroke={strokeColor} 
+                                    strokeWidth={strokeWidth} 
+                                    strokeDasharray={dashArray}
+                                    strokeLinecap="round"
+                                    markerEnd={`url(#arrowhead-${strokeColor})`} 
+                                    pointerEvents="none"
+                                />
+                                <circle cx={`${line.start.x}%`} cy={`${line.start.y}%`} r={6 * scale} fill={strokeColor} pointerEvents="none" />
+                                {!isLocked && (
+                                    <>
+                                        <line 
+                                            x1={`${line.start.x}%`} y1={`${line.start.y}%`} 
+                                            x2={`${line.end.x}%`} y2={`${line.end.y}%`}
+                                            stroke="transparent" strokeWidth={lineHandleSizePx} className="cursor-move"
+                                            onMouseDown={(e) => handleLineBodyMouseDown(e, line)}
+                                            onDoubleClick={(e) => { e.stopPropagation(); onDeleteLine(line.id); }}
+                                        />
+                                        <circle cx={`${line.start.x}%`} cy={`${line.start.y}%`} r={12 * scale} fill="transparent" className="cursor-grab active:cursor-grabbing"
+                                            onMouseDown={(e) => handleLineHandleMouseDown(e, line.id, 'start')} />
+                                        <circle cx={`${line.end.x}%`} cy={`${line.end.y}%`} r={12 * scale} fill="transparent" className="cursor-grab active:cursor-grabbing"
+                                            onMouseDown={(e) => handleLineHandleMouseDown(e, line.id, 'end')} />
+                                    </>
+                                )}
+                            </g>
+                        );
+                    })}
+
+                    {drawingLine && (() => {
+                        const strokeWidth = getLineStrokeWidth(drawingLine.start, drawingLine.end, courtWidth);
+                        return (
+                            <g pointerEvents="none">
+                                <line 
+                                    x1={`${drawingLine.start.x}%`} y1={`${drawingLine.start.y}%`} 
+                                    x2={`${drawingLine.end.x}%`} y2={`${drawingLine.end.y}%`}
+                                    stroke={activeLineColor} 
+                                    strokeWidth={strokeWidth} 
+                                    strokeOpacity="0.8" 
+                                    strokeLinecap="round"
+                                    strokeDasharray={activeLineType === LineType.DASHED ? `${12 * scale}, ${12 * scale}` : "none"}
+                                />
+                                <circle cx={`${drawingLine.start.x}%`} cy={`${drawingLine.start.y}%`} r={6 * scale} fill={activeLineColor} opacity="0.5" />
+                            </g>
+                        );
+                    })()}
+                </svg>
+
                 {paths.map(path => {
                     const startPos = resolvePosition(path.sourceId, path.sourceType);
                     if (!startPos) return null;
                     const meta = pathMetadata[path.id];
                     const player = items.find(i => i.id === meta?.rootPlayerId);
-                    const strokeColor = player ? getHexColor(player.color) : '#4b5563';
+                    if (!player) return null;
+                    const ghosts = getGhostPositions(startPos, path.endPosition);
 
                     return (
-                        <g key={path.id}>
-                            <line 
-                                x1={`${startPos.x}%`} y1={`${startPos.y}%`} 
-                                x2={`${path.endPosition.x}%`} y2={`${path.endPosition.y}%`}
-                                stroke={strokeColor} 
-                                strokeWidth="2.5"
-                                strokeDasharray="6, 6"
-                                markerEnd={`url(#arrowhead-${strokeColor})`}
-                                opacity="0.9"
-                            />
-                        </g>
+                        <React.Fragment key={path.id}>
+                            {ghosts.map((pos, idx) => (
+                                <div
+                                    key={`ghost-${path.id}-${idx}`}
+                                    className="absolute z-20 pointer-events-none flex items-center justify-center opacity-50 transition-transform duration-500"
+                                    style={{
+                                        left: `${pos.x}%`,
+                                        top: `${pos.y}%`,
+                                        transform: `translate(-50%, -50%)`,
+                                        width: ghostSizePx,
+                                        height: ghostSizePx,
+                                    }}
+                                >
+                                    <span 
+                                        className={`material-symbols-outlined drop-shadow-sm filter ${getColorClass(player.color)}`}
+                                        style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSizePx }}
+                                    >
+                                        accessibility_new
+                                    </span>
+                                </div>
+                            ))}
+                            <div
+                                className={`absolute z-30 flex items-center justify-center opacity-90 transition-transform duration-500 ${!isLocked ? 'cursor-move hover:scale-110' : ''} ${interaction.type === 'DRAG_PATH_END' && interaction.pathId === path.id ? 'scale-110 cursor-grabbing' : ''}`}
+                                style={{
+                                    left: `${path.endPosition.x}%`,
+                                    top: `${path.endPosition.y}%`,
+                                    transform: `translate(-50%, -50%)`,
+                                    width: ghostSizePx,
+                                    height: ghostSizePx,
+                                }}
+                                onMouseDown={(e) => !isLocked && handlePathEndMouseDown(e, path.id)}
+                                onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeletePath && onDeletePath(path.id); } }}
+                            >
+                                <div className="relative flex items-center justify-center">
+                                    <span 
+                                        className={`material-symbols-outlined drop-shadow-xl filter ${getColorClass(player.color)}`}
+                                        style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSizePx }}
+                                    >
+                                        accessibility_new
+                                    </span>
+                                    <span 
+                                        className="absolute text-white font-bold drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none"
+                                        style={{ fontSize: labelFontSizePx * 0.8 }}
+                                    >
+                                        {meta?.depth}
+                                    </span>
+                                </div>
+                            </div>
+                        </React.Fragment>
                     );
                 })}
 
                 {interaction.type === 'CREATING_PATH' && (() => {
                     const startPos = resolvePosition(interaction.sourceId, interaction.sourceType);
                     if (!startPos) return null;
-                    let strokeColor = '#ffffff';
+                    let colorClass = 'text-white';
                     if (interaction.sourceType === 'PLAYER') {
                         const player = items.find(i => i.id === interaction.sourceId);
-                        if (player) strokeColor = getHexColor(player.color);
+                        if (player) colorClass = getColorClass(player.color);
                     } else {
                         const meta = pathMetadata[interaction.sourceId];
                         const player = items.find(i => i.id === meta?.rootPlayerId);
-                        if (player) strokeColor = getHexColor(player.color);
+                        if (player) colorClass = getColorClass(player.color);
                     }
-
+                    const ghosts = getGhostPositions(startPos, interaction.currentEnd);
                     return (
-                        <g>
-                             <line 
-                                x1={`${startPos.x}%`} y1={`${startPos.y}%`} 
-                                x2={`${interaction.currentEnd.x}%`} y2={`${interaction.currentEnd.y}%`}
-                                stroke={strokeColor} 
-                                strokeWidth="2.5" 
-                                strokeDasharray="6, 6" 
-                                markerEnd={`url(#arrowhead-${strokeColor})`}
-                                opacity="0.9"
-                            />
-                        </g>
+                        <>
+                            {ghosts.map((pos, idx) => (
+                                <div key={`ghost-creating-${idx}`} className="absolute z-20 pointer-events-none flex items-center justify-center opacity-50 transition-transform duration-500"
+                                    style={{
+                                        left: `${pos.x}%`,
+                                        top: `${pos.y}%`,
+                                        transform: `translate(-50%, -50%)`,
+                                        width: ghostSizePx,
+                                        height: ghostSizePx,
+                                    }}>
+                                    <span className={`material-symbols-outlined drop-shadow-sm filter ${colorClass}`} style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSizePx }}>accessibility_new</span>
+                                </div>
+                            ))}
+                            <div className="absolute z-20 pointer-events-none flex items-center justify-center opacity-80 transition-transform duration-500"
+                                style={{
+                                    left: `${interaction.currentEnd.x}%`,
+                                    top: `${interaction.currentEnd.y}%`,
+                                    transform: `translate(-50%, -50%)`,
+                                    width: ghostSizePx,
+                                    height: ghostSizePx,
+                                }}>
+                                <span className={`material-symbols-outlined drop-shadow-sm filter ${colorClass}`} style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSizePx }}>accessibility_new</span>
+                            </div>
+                        </>
                     );
                 })()}
 
                 {lines.map(line => {
-                    const strokeColor = line.color || '#4b5563';
-                    const dashArray = line.type === LineType.DASHED ? "12, 12" : "none";
-                    const strokeWidth = getLineIntensity(line.start, line.end);
+                    const midX = (line.start.x + line.end.x) / 2;
+                    const midY = (line.start.y + line.end.y) / 2;
                     return (
-                        <g key={line.id} className={!isLocked ? "pointer-events-auto" : "pointer-events-none"}>
-                            <line 
-                                x1={`${line.start.x}%`} y1={`${line.start.y}%`} 
-                                x2={`${line.end.x}%`} y2={`${line.end.y}%`}
-                                stroke={strokeColor} 
-                                strokeWidth={strokeWidth} 
-                                strokeDasharray={dashArray}
-                                strokeLinecap="round"
-                                markerEnd={`url(#arrowhead-${strokeColor})`} 
-                                pointerEvents="none"
+                        <div key={`label-${line.id}`} className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20"
+                            style={{ left: `${midX}%`, top: `${midY}%` }}
+                            onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeleteLine(line.id); } }}>
+                            <EditableLabel 
+                                value={line.label} 
+                                onChange={(val) => onUpdateLine(line.id, { label: val })} 
+                                className="text-white font-bold whitespace-nowrap block bg-[#1c2620] border border-gray-600 rounded-md shadow-sm"
+                                style={{ fontSize: labelFontSizePx, padding: '2px 4px' }}
+                                disabled={isLocked} 
                             />
-                            <circle cx={`${line.start.x}%`} cy={`${line.start.y}%`} r="6" fill={strokeColor} pointerEvents="none" />
-                            {!isLocked && (
-                                <>
-                                    <line 
-                                        x1={`${line.start.x}%`} y1={`${line.start.y}%`} 
-                                        x2={`${line.end.x}%`} y2={`${line.end.y}%`}
-                                        stroke="transparent" strokeWidth={lineHandleSize} className="cursor-move"
-                                        onMouseDown={(e) => handleLineBodyMouseDown(e, line)}
-                                        onDoubleClick={(e) => { e.stopPropagation(); onDeleteLine(line.id); }}
-                                    />
-                                    <circle cx={`${line.start.x}%`} cy={`${line.start.y}%`} r="12" fill="transparent" className="cursor-grab active:cursor-grabbing"
-                                        onMouseDown={(e) => handleLineHandleMouseDown(e, line.id, 'start')} />
-                                    <circle cx={`${line.end.x}%`} cy={`${line.end.y}%`} r="12" fill="transparent" className="cursor-grab active:cursor-grabbing"
-                                        onMouseDown={(e) => handleLineHandleMouseDown(e, line.id, 'end')} />
-                                </>
-                            )}
-                        </g>
+                        </div>
                     );
                 })}
 
-                {drawingLine && (() => {
-                    const strokeWidth = getLineIntensity(drawingLine.start, drawingLine.end);
-                    return (
-                        <g pointerEvents="none">
-                            <line 
-                                x1={`${drawingLine.start.x}%`} y1={`${drawingLine.start.y}%`} 
-                                x2={`${drawingLine.end.x}%`} y2={`${drawingLine.end.y}%`}
-                                stroke={activeLineColor} 
-                                strokeWidth={strokeWidth} 
-                                strokeOpacity="0.8" 
-                                strokeLinecap="round"
-                                strokeDasharray={activeLineType === LineType.DASHED ? "12, 12" : "none"}
-                            />
-                             <circle cx={`${drawingLine.start.x}%`} cy={`${drawingLine.start.y}%`} r="6" fill={activeLineColor} opacity="0.5" />
-                        </g>
-                    );
-                })()}
-            </svg>
+                {items.map(item => {
+                    const hasPaths = paths.some(p => p.sourceId === item.id && p.sourceType === 'PLAYER');
+                    
+                    let content = null;
+                    // Markers and Players are z-30, Shuttles are z-40 to appear "in hand" or on top
+                    const zIndexClass = item.type === ItemType.SHUTTLE ? 'z-40' : 'z-30';
 
-            {paths.map(path => {
-                const startPos = resolvePosition(path.sourceId, path.sourceType);
-                if (!startPos) return null;
-                const meta = pathMetadata[path.id];
-                const player = items.find(i => i.id === meta?.rootPlayerId);
-                if (!player) return null;
-                const ghosts = getGhostPositions(startPos, path.endPosition);
-
-                return (
-                    <React.Fragment key={path.id}>
-                        {ghosts.map((pos, idx) => (
-                             <div
-                                key={`ghost-${path.id}-${idx}`}
-                                className="absolute z-20 pointer-events-none flex items-center justify-center opacity-50 transition-transform duration-500"
-                                style={{
-                                    left: `${pos.x}%`,
-                                    top: `${pos.y}%`,
-                                    transform: `translate(-50%, -50%)`,
-                                    width: ghostSize,
-                                    height: ghostSize,
-                                }}
-                            >
-                                <span 
-                                    className={`material-symbols-outlined drop-shadow-sm filter ${getColorClass(player.color)}`}
-                                    style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSize }}
-                                >
-                                    accessibility_new
-                                </span>
-                            </div>
-                        ))}
-                        <div
-                            className={`absolute z-30 flex items-center justify-center opacity-90 transition-transform duration-500 ${!isLocked ? 'cursor-move hover:scale-110' : ''} ${interaction.type === 'DRAG_PATH_END' && interaction.pathId === path.id ? 'scale-110 cursor-grabbing' : ''}`}
-                            style={{
-                                left: `${path.endPosition.x}%`,
-                                top: `${path.endPosition.y}%`,
-                                transform: `translate(-50%, -50%)`,
-                                width: ghostSize,
-                                height: ghostSize,
-                            }}
-                            onMouseDown={(e) => !isLocked && handlePathEndMouseDown(e, path.id)}
-                            onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeletePath && onDeletePath(path.id); } }}
-                        >
-                            <div className="relative flex items-center justify-center">
-                                <span 
-                                    className={`material-symbols-outlined drop-shadow-xl filter ${getColorClass(player.color)}`}
-                                    style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSize }}
-                                >
-                                    accessibility_new
-                                </span>
-                                <span 
-                                    className="absolute text-white font-bold drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none"
-                                    style={{ fontSize: `calc(${labelFontSize} * 0.8)` }}
-                                >
-                                    {meta?.depth}
-                                </span>
-                            </div>
-                        </div>
-                    </React.Fragment>
-                );
-            })}
-
-             {interaction.type === 'CREATING_PATH' && (() => {
-                 const startPos = resolvePosition(interaction.sourceId, interaction.sourceType);
-                 if (!startPos) return null;
-                 let colorClass = 'text-white';
-                 if (interaction.sourceType === 'PLAYER') {
-                    const player = items.find(i => i.id === interaction.sourceId);
-                    if (player) colorClass = getColorClass(player.color);
-                 } else {
-                    const meta = pathMetadata[interaction.sourceId];
-                    const player = items.find(i => i.id === meta?.rootPlayerId);
-                    if (player) colorClass = getColorClass(player.color);
-                 }
-                 const ghosts = getGhostPositions(startPos, interaction.currentEnd);
-                 return (
-                    <>
-                        {ghosts.map((pos, idx) => (
-                             <div key={`ghost-creating-${idx}`} className="absolute z-20 pointer-events-none flex items-center justify-center opacity-50 transition-transform duration-500"
-                                style={{
-                                    left: `${pos.x}%`,
-                                    top: `${pos.y}%`,
-                                    transform: `translate(-50%, -50%)`,
-                                    width: ghostSize,
-                                    height: ghostSize,
-                                }}>
-                                 <span className={`material-symbols-outlined drop-shadow-sm filter ${colorClass}`} style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSize }}>accessibility_new</span>
-                            </div>
-                        ))}
-                         <div className="absolute z-20 pointer-events-none flex items-center justify-center opacity-80 transition-transform duration-500"
-                            style={{
-                                left: `${interaction.currentEnd.x}%`,
-                                top: `${interaction.currentEnd.y}%`,
-                                transform: `translate(-50%, -50%)`,
-                                width: ghostSize,
-                                height: ghostSize,
-                            }}>
-                            <span className={`material-symbols-outlined drop-shadow-sm filter ${colorClass}`} style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSize }}>accessibility_new</span>
-                        </div>
-                    </>
-                 );
-             })()}
-
-            {lines.map(line => {
-                const midX = (line.start.x + line.end.x) / 2;
-                const midY = (line.start.y + line.end.y) / 2;
-                return (
-                    <div key={`label-${line.id}`} className="absolute transform -translate-x-1/2 -translate-y-1/2 z-20"
-                        style={{ left: `${midX}%`, top: `${midY}%` }}
-                        onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeleteLine(line.id); } }}>
-                        <EditableLabel 
-                            value={line.label} 
-                            onChange={(val) => onUpdateLine(line.id, { label: val })} 
-                            className="text-white font-bold whitespace-nowrap block bg-[#1c2620] border border-gray-600 rounded-md shadow-sm"
-                            style={{ fontSize: labelFontSize, padding: '2px 4px' }}
-                            disabled={isLocked} 
-                        />
-                    </div>
-                );
-            })}
-
-            {items.map(item => {
-                const hasPaths = paths.some(p => p.sourceId === item.id && p.sourceType === 'PLAYER');
-                
-                let content = null;
-                // Markers and Players are z-30, Shuttles are z-40 to appear "in hand" or on top
-                const zIndexClass = item.type === ItemType.SHUTTLE ? 'z-40' : 'z-30';
-
-                if (item.type === ItemType.PLAYER) {
-                    content = (
-                        <div className="flex flex-col items-center justify-center h-full w-full relative">
-                            <div className="relative flex items-center justify-center">
-                                <span 
-                                    className={`material-symbols-outlined filter drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] ${getColorClass(item.color)}`} 
-                                    style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSize }}
-                                >
-                                    accessibility_new
-                                </span>
-                                {hasPaths && ( 
+                    if (item.type === ItemType.PLAYER) {
+                        content = (
+                            <div className="flex flex-col items-center justify-center h-full w-full relative">
+                                <div className="relative flex items-center justify-center">
                                     <span 
-                                        className="absolute text-white font-bold drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none"
-                                        style={{ fontSize: `calc(${labelFontSize} * 0.8)` }}
+                                        className={`material-symbols-outlined filter drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] ${getColorClass(item.color)}`} 
+                                        style={{ fontVariationSettings: "'FILL' 1", fontSize: itemSizePx }}
                                     >
-                                        0
-                                    </span> 
+                                        accessibility_new
+                                    </span>
+                                    {hasPaths && ( 
+                                        <span 
+                                            className="absolute text-white font-bold drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)] pointer-events-none"
+                                            style={{ fontSize: labelFontSizePx * 0.8 }}
+                                        >
+                                            0
+                                        </span> 
+                                    )}
+                                </div>
+                                {item.label && (
+                                    <div style={{ position: 'absolute', top: '100%', marginTop: '4px' }}>
+                                        <EditableLabel 
+                                            value={item.label} 
+                                            onChange={(val) => onUpdateItem(item.id, { label: val })} 
+                                            className="bg-black/80 text-white whitespace-nowrap shadow-md font-bold" 
+                                            style={{ fontSize: labelFontSizePx }}
+                                            disabled={isLocked} 
+                                        />
+                                    </div>
                                 )}
                             </div>
-                            {item.label && (
-                                <div style={{ position: 'absolute', top: '90%' }}>
-                                    <EditableLabel 
-                                        value={item.label} 
-                                        onChange={(val) => onUpdateItem(item.id, { label: val })} 
-                                        className="bg-black/60 text-white rounded-md whitespace-nowrap backdrop-blur-sm shadow-md font-bold" 
-                                        style={{ fontSize: labelFontSize }}
-                                        disabled={isLocked} 
-                                    />
+                        );
+                    } else if (item.type === ItemType.MARKER) {
+                        content = (
+                            <div className="relative flex flex-col items-center">
+                                <div 
+                                    className="rounded-full bg-white flex items-center justify-center shadow-[0_4px_6px_rgba(0,0,0,0.4)] select-none group font-bold text-black border border-gray-300"
+                                    style={{ width: markerSizePx, height: markerSizePx, fontSize: markerFontSizePx }}
+                                >
+                                    {item.label}
                                 </div>
-                            )}
-                        </div>
-                    );
-                } else if (item.type === ItemType.MARKER) {
-                    content = (
-                        <div className="relative flex flex-col items-center">
-                            <div 
-                                className="rounded-full bg-white flex items-center justify-center shadow-[0_4px_6px_rgba(0,0,0,0.4)] select-none group font-bold text-black border border-gray-300"
-                                style={{ width: markerCircleSize, height: markerCircleSize, fontSize: markerFontSize }}
-                            >
-                                {item.label}
                             </div>
+                        );
+                    } else if (item.type === ItemType.SHUTTLE) {
+                        content = (
+                            <div className="relative flex flex-col items-center justify-center drop-shadow-lg filter rotate-45" style={{ width: shuttleSizePx, height: shuttleSizePx }}>
+                                <svg viewBox="0 0 24 24" className="w-full h-full fill-white">
+                                    <path d="M8 19C8 21.2 9.8 23 12 23C14.2 23 16 21.2 16 19H8Z" />
+                                    <path d="M16 18L19.5 4L16.5 4L14.5 12L13.5 4L10.5 4L9.5 12L7.5 4L4.5 4L8 18H16Z" />
+                                    <path d="M6 10H18" stroke="black" strokeWidth="1" strokeOpacity="0.3" />
+                                    <path d="M7 14H17" stroke="black" strokeWidth="1" strokeOpacity="0.3" />
+                                </svg>
+                            </div>
+                        );
+                    }
+
+                    return (
+                        <div
+                            key={item.id}
+                            className={`absolute ${zIndexClass} transition-transform duration-500 flex flex-col items-center justify-center 
+                                ${!isLocked ? 'cursor-move' : ''} 
+                                ${interaction.type === 'DRAG_ITEM' && interaction.id === item.id ? 'scale-110 cursor-grabbing' : (!isLocked ? 'hover:scale-110' : '')}
+                            `}
+                            style={{
+                                left: `${item.position.x}%`,
+                                top: `${item.position.y}%`,
+                                transform: `translate(-50%, -50%)`, 
+                                width: item.type === ItemType.SHUTTLE ? shuttleSizePx : itemSizePx,
+                                height: item.type === ItemType.SHUTTLE ? shuttleSizePx : itemSizePx,
+                            }}
+                            onMouseDown={(e) => handleItemMouseDown(e, item.id, item.type)}
+                            onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeleteItem(item.id); } }}
+                        >
+                            {content}
                         </div>
                     );
-                } else if (item.type === ItemType.SHUTTLE) {
-                    content = (
-                        <div className="relative flex flex-col items-center justify-center drop-shadow-lg filter rotate-45" style={{ width: shuttleSize, height: shuttleSize }}>
-                             <svg viewBox="0 0 24 24" className="w-full h-full fill-white">
-                                <path d="M8 19C8 21.2 9.8 23 12 23C14.2 23 16 21.2 16 19H8Z" />
-                                <path d="M16 18L19.5 4L16.5 4L14.5 12L13.5 4L10.5 4L9.5 12L7.5 4L4.5 4L8 18H16Z" />
-                                <path d="M6 10H18" stroke="black" strokeWidth="1" strokeOpacity="0.3" />
-                                <path d="M7 14H17" stroke="black" strokeWidth="1" strokeOpacity="0.3" />
-                             </svg>
-                         </div>
-                    );
-                }
-
-                return (
-                    <div
-                        key={item.id}
-                        className={`absolute ${zIndexClass} transition-transform duration-500 flex flex-col items-center justify-center 
-                            ${!isLocked ? 'cursor-move' : ''} 
-                            ${interaction.type === 'DRAG_ITEM' && interaction.id === item.id ? 'scale-110 cursor-grabbing' : (!isLocked ? 'hover:scale-110' : '')}
-                        `}
-                        style={{
-                            left: `${item.position.x}%`,
-                            top: `${item.position.y}%`,
-                            transform: `translate(-50%, -50%)`, 
-                            width: item.type === ItemType.SHUTTLE ? shuttleSize : itemSize,
-                            height: item.type === ItemType.SHUTTLE ? shuttleSize : itemSize,
-                        }}
-                        onMouseDown={(e) => handleItemMouseDown(e, item.id, item.type)}
-                        onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeleteItem(item.id); } }}
-                    >
-                        {content}
-                    </div>
-                );
-            })}
+                })}
+            </div>
         </div>
     </div>
   );
-};
+});

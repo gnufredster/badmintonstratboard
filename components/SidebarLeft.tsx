@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ItemType, LineType } from '../types';
 import { MAX_PLAYERS, MAX_MARKERS, MAX_SHUTTLES, LINE_COLORS } from '../constants';
 
@@ -10,9 +10,6 @@ interface SidebarLeftProps {
   onClearPlayers: () => void;
   onClearMarkers: () => void;
   onOpenFeedback: () => void;
-  onToggleNotes: () => void;
-  onLogout: () => void;
-  isNotesOpen: boolean;
   playerCount: number;
   markerCount: number;
   shuttleCount?: number;
@@ -41,9 +38,6 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   onClearPlayers,
   onClearMarkers,
   onOpenFeedback,
-  onToggleNotes,
-  onLogout,
-  isNotesOpen,
   playerCount,
   markerCount,
   shuttleCount = 0,
@@ -61,7 +55,8 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   onApplyPreset,
 }) => {
   
-  const [gameType, setGameType] = useState<GameType>('SINGLES');
+  // Initialize with DOUBLES to match App.tsx preset
+  const [gameType, setGameType] = useState<GameType>('DOUBLES');
   const [situation, setSituation] = useState<Situation>('SERVE');
   const [side, setSide] = useState<Side>('EVEN');
 
@@ -298,7 +293,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
          {/* Divider */}
          <div className="w-6 md:w-[8vw] h-px bg-white/5 my-0.5"></div>
          
-         {/* Tools: Lock, Feedback, Notes */}
+         {/* Tools: Lock, Tutorial, Feedback */}
          <div className="flex flex-wrap justify-center gap-2 md:gap-[1vw]">
              <button 
                 onClick={onToggleLock}
@@ -314,14 +309,6 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
                 title="Open Tutorial"
             >
                 <span className="material-symbols-outlined text-lg md:text-[2vw]">school</span>
-            </button>
-
-            <button 
-                onClick={onToggleNotes}
-                className={`w-8 h-8 md:w-[3.5vw] md:h-[3.5vw] rounded-lg flex items-center justify-center transition-all ${isNotesOpen ? 'bg-primary text-sidebar-dark' : 'bg-[#1c2620] text-white/50 hover:text-white'}`}
-                title="Commentary & Notes"
-            >
-                <span className="material-symbols-outlined text-lg md:text-[2vw]">edit_note</span>
             </button>
 
             <button 
@@ -363,14 +350,6 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
             </p>
           </div>
         </div>
-
-        <button 
-            onClick={onLogout}
-            className="w-full py-2 md:py-[1.5vw] flex items-center justify-center gap-2 text-white/30 hover:text-rose-400 hover:bg-rose-500/5 rounded-xl transition-colors"
-        >
-            <span className="material-symbols-outlined text-lg md:text-[2vw]">logout</span>
-            <span className="text-xs md:text-[0.8vw] font-bold uppercase tracking-widest hidden md:block">Logout</span>
-        </button>
       </div>
     </aside>
   );

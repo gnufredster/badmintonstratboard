@@ -8,246 +8,280 @@ interface TutorialModalProps {
 
 const TUTORIAL_STEPS = [
   {
-    title: "Welcome to Strategy Builder",
-    description: "Design tactical badminton plays, position players, and visualize movement sequences with ease.",
+    title: "Badminton Formations",
+    description: "Use the presets in the sidebar to instantly set up standard Doubles or Singles formations for Serving or Receiving.",
   },
   {
-    title: "Positioning",
-    description: "Drag and drop Players (P1, P2) and Shuttle Markers (1, 2) from the sidebar onto the court to set up the play.",
+    title: "Position Markers",
+    description: "Drag numbered Markers from the sidebar onto the court to highlight specific zones or player targets.",
   },
   {
-    title: "Drawing Lines",
-    description: "Click and drag anywhere on the court to draw shot lines. Use the sidebar to toggle between Solid and Dashed lines.",
+    title: "Shuttlecock Snap",
+    description: "Drag a Shuttlecock onto the court. Drop it near a Player to automatically snap it to their hand.",
   },
   {
-    title: "Ghost Movement",
-    description: "Long Press (1s) on a Player or Path End to create a 'Ghost' movement path. This visualizes where a player moves next.",
+    title: "Draw Lines",
+    description: "Click and drag anywhere on the court background to draw shot trajectories or movement lines.",
   },
   {
-    title: "Tools & Locking",
-    description: "Lock the board to prevent accidental edits while viewing. Use the right sidebar to add detailed tactical notes.",
+    title: "Remove Items",
+    description: "Double-click any item to remove it instantly, or drag it into the Trash Bin in the sidebar.",
   }
 ];
 
+/* --- Constants for Styles --- */
+const COURT_BG = "bg-court-green";
+const SIDEBAR_BG = "bg-sidebar-dark";
+const PLAYER_ICON = "accessibility_new";
+const CURSOR_ICON = "touch_app";
+
 /* --- Animated Visual Components --- */
 
-const VisualStep0 = () => (
-    <div className="relative w-full h-full flex items-center justify-center bg-[#0d120f] overflow-hidden rounded-xl border border-white/5">
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-        <div className="relative z-10 flex flex-col items-center animate-bounce-slow">
-            <span className="material-symbols-outlined text-8xl text-primary drop-shadow-[0_0_25px_rgba(54,226,123,0.4)]">sports_tennis</span>
-            <div className="mt-6 flex gap-3">
-                <div className="w-3 h-3 rounded-full bg-rose-500 animate-pulse"></div>
-                <div className="w-3 h-3 rounded-full bg-blue-600 animate-pulse delay-75"></div>
-                <div className="w-3 h-3 rounded-full bg-purple-600 animate-pulse delay-150"></div>
+const VisualFormation = () => (
+    <div className={`relative w-full h-full flex overflow-hidden rounded-xl border border-white/5 ${COURT_BG}`}>
+        {/* Court Lines Background */}
+        <div className="absolute inset-0 opacity-30" 
+             style={{ 
+                 backgroundImage: `linear-gradient(rgba(255,255,255,0.5) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,0.5) 2px, transparent 2px)`, 
+                 backgroundSize: '100% 100%',
+                 backgroundPosition: 'center'
+             }}>
+             <div className="absolute top-0 bottom-0 w-[2px] bg-white left-[8%]"></div>
+             <div className="absolute top-0 bottom-0 w-[2px] bg-white right-[8%]"></div>
+             <div className="absolute left-0 right-0 h-[2px] bg-white top-[10%]"></div>
+             <div className="absolute left-0 right-0 h-[2px] bg-white bottom-[10%]"></div>
+             <div className="absolute top-0 bottom-0 w-[2px] bg-white left-1/2 -translate-x-1/2"></div>
+        </div>
+        
+        {/* Sidebar Mock */}
+        <div className={`absolute left-4 top-1/2 -translate-y-1/2 w-32 bg-[#1c2620] border border-white/10 rounded-md flex flex-col gap-2 p-2 z-20 shadow-xl`}>
+            <div className="text-[8px] font-bold text-[#9eb7a8] uppercase tracking-widest text-center">Formations</div>
+            <div className="flex gap-1">
+                <div className="h-4 flex-1 bg-white/10 rounded-sm"></div>
+                <div className="h-4 flex-1 bg-primary/20 border border-primary/50 rounded-sm animate-pulse"></div>
+            </div>
+            <div className="flex gap-1">
+                <div className="h-4 flex-1 bg-white/10 rounded-sm"></div>
+                <div className="h-4 flex-1 bg-white/10 rounded-sm"></div>
             </div>
         </div>
+
+        {/* Players appearing on court */}
+        <div className="absolute inset-0 z-10">
+            {/* Player 1 - Red */}
+            <div className="absolute top-[60%] left-[25%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center animate-formation-p1">
+                <span className="material-symbols-outlined text-red-600 text-4xl drop-shadow-md" style={{ fontVariationSettings: "'FILL' 1" }}>{PLAYER_ICON}</span>
+            </div>
+            {/* Player 2 - Blue */}
+            <div className="absolute top-[60%] left-[75%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center animate-formation-p2">
+                <span className="material-symbols-outlined text-blue-600 text-4xl drop-shadow-md" style={{ fontVariationSettings: "'FILL' 1" }}>{PLAYER_ICON}</span>
+            </div>
+            {/* Player 3 - Yellow */}
+            <div className="absolute top-[30%] left-[40%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center animate-formation-p3">
+                <span className="material-symbols-outlined text-yellow-400 text-4xl drop-shadow-md" style={{ fontVariationSettings: "'FILL' 1" }}>{PLAYER_ICON}</span>
+            </div>
+            {/* Player 4 - Orange */}
+            <div className="absolute top-[30%] left-[60%] -translate-x-1/2 -translate-y-1/2 flex flex-col items-center animate-formation-p4">
+                <span className="material-symbols-outlined text-orange-500 text-4xl drop-shadow-md" style={{ fontVariationSettings: "'FILL' 1" }}>{PLAYER_ICON}</span>
+            </div>
+        </div>
+
         <style>{`
-            .animate-bounce-slow { animation: bounce-slow 3s infinite ease-in-out; }
-            @keyframes bounce-slow {
-                0%, 100% { transform: translateY(-5%); }
-                50% { transform: translateY(5%); }
+            @keyframes formation-move-1 {
+                0% { top: 60%; left: 25%; opacity: 0; transform: scale(0) translate(-50%, -50%); }
+                20% { top: 60%; left: 25%; opacity: 1; transform: scale(1) translate(-50%, -50%); }
+                50% { top: 70%; left: 55%; opacity: 1; transform: scale(1) translate(-50%, -50%); }
+                80% { top: 70%; left: 55%; opacity: 1; transform: scale(1) translate(-50%, -50%); }
+                100% { top: 60%; left: 25%; opacity: 0; transform: scale(0) translate(-50%, -50%); }
             }
+            .animate-formation-p1 { animation: formation-move-1 4s infinite ease-in-out; }
+            .animate-formation-p2 { animation: formation-move-1 4s infinite ease-in-out 0.1s reverse; }
+            .animate-formation-p3 { animation: formation-move-1 4s infinite ease-in-out 0.2s; }
+            .animate-formation-p4 { animation: formation-move-1 4s infinite ease-in-out 0.3s reverse; }
         `}</style>
     </div>
 );
 
-const VisualStep1 = () => (
-    <div className="relative w-full h-full flex bg-[#0d120f] overflow-hidden border border-white/5 rounded-xl">
+const VisualMarkerDrag = () => (
+    <div className={`relative w-full h-full flex overflow-hidden border border-white/5 rounded-xl ${COURT_BG}`}>
         {/* Sidebar Mock */}
-        <div className="w-1/4 h-full bg-sidebar-dark border-r border-white/10 flex flex-col items-center pt-8 gap-4 z-10">
-            <div className="w-10 h-10 rounded-lg bg-[#1c2620] border border-white/10 flex items-center justify-center">
-                <span className="material-symbols-outlined text-white/50">accessibility_new</span>
+        <div className={`w-24 h-full ${SIDEBAR_BG} border-r border-white/10 flex flex-col items-center pt-8 gap-4 z-20 shadow-xl`}>
+            {/* Other Tools */}
+            <div className="w-8 h-8 opacity-20 bg-white/10 rounded-sm"></div>
+            {/* Marker Source */}
+            <div className="relative p-2 bg-white/5 rounded-lg border border-white/10">
+                <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-md border border-gray-300">
+                    <span className="text-black font-bold text-[10px]">1</span>
+                </div>
             </div>
+            <div className="w-8 h-8 opacity-20 bg-white/10 rounded-sm"></div>
         </div>
-        {/* Court Mock */}
-        <div className="flex-1 relative bg-court-green/20">
-             <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+
+        {/* Court Area */}
+        <div className="flex-1 relative">
+             <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
              
-             {/* Animated Item */}
-             <div className="absolute w-12 h-12 bg-transparent flex items-center justify-center z-20 animate-tutorial-drag">
-                 <span className="material-symbols-outlined text-5xl text-rose-500 drop-shadow-lg" style={{ fontVariationSettings: "'FILL' 1" }}>accessibility_new</span>
+             {/* Animated Marker */}
+             <div className="absolute z-30 animate-marker-drag flex flex-col items-center">
+                 <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shadow-[0_4px_6px_rgba(0,0,0,0.4)] border border-gray-300">
+                     <span className="text-black font-bold text-xs">1</span>
+                 </div>
                  {/* Cursor Overlay */}
-                 <span className="material-symbols-outlined absolute -bottom-4 -right-4 text-white drop-shadow-md text-3xl">touch_app</span>
+                 <span className="material-symbols-outlined absolute top-4 left-4 text-white drop-shadow-md text-2xl" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{CURSOR_ICON}</span>
              </div>
         </div>
         <style>{`
-            .animate-tutorial-drag { animation: tutorial-drag 4s infinite ease-in-out; }
-            @keyframes tutorial-drag {
-                0% { top: 32px; left: 8%; transform: scale(1); } /* Start in sidebar */
-                15% { top: 32px; left: 8%; transform: scale(0.9); } /* Grab */
-                50% { top: 60%; left: 60%; transform: scale(0.9); } /* Drag to court */
-                70% { top: 60%; left: 60%; transform: scale(1); } /* Drop */
-                100% { top: 60%; left: 60%; transform: scale(1); } /* Wait */
+            @keyframes marker-drag {
+                0% { top: 45px; left: -15px; transform: scale(1); opacity: 0; }
+                10% { top: 45px; left: -15px; transform: scale(1); opacity: 1; }
+                15% { top: 45px; left: -15px; transform: scale(0.9); }
+                50% { top: 50%; left: 50%; transform: scale(0.9); }
+                70% { top: 50%; left: 50%; transform: scale(1); }
+                90% { top: 50%; left: 50%; transform: scale(1); opacity: 1; }
+                100% { top: 50%; left: 50%; transform: scale(1); opacity: 0; }
             }
+            .animate-marker-drag { animation: marker-drag 3s infinite ease-in-out; }
         `}</style>
     </div>
 );
 
-const VisualStep2 = () => (
-     <div className="relative w-full h-full bg-court-green/20 overflow-hidden border border-white/5 rounded-xl">
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
-        
-        {/* Start Point Dot */}
-        <div className="absolute top-[30%] left-[30%] w-3 h-3 rounded-full bg-yellow-400 shadow-sm z-10"></div>
-        {/* End Point Dot */}
-        <div className="absolute top-[70%] left-[70%] w-3 h-3 rounded-full bg-yellow-400 shadow-sm z-10"></div>
-
-        <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-            <line 
-                x1="30%" y1="30%" 
-                x2="70%" y2="70%" 
-                stroke="#facc15" 
-                strokeWidth="4" 
-                className="animate-draw-line"
-            />
-        </svg>
-
-        {/* Cursor */}
-        <div className="absolute z-20 animate-cursor-draw">
-             <span className="material-symbols-outlined text-white drop-shadow-md text-3xl">touch_app</span>
-        </div>
-
-        <style>{`
-            .animate-draw-line {
-                stroke-dasharray: 1000;
-                stroke-dashoffset: 1000;
-                animation: draw-line 3s infinite ease-in-out;
-            }
-            .animate-cursor-draw {
-                animation: cursor-draw 3s infinite ease-in-out;
-            }
-            @keyframes draw-line {
-                0% { stroke-dashoffset: 1000; }
-                10% { stroke-dashoffset: 1000; }
-                60% { stroke-dashoffset: 0; }
-                100% { stroke-dashoffset: 0; }
-            }
-            @keyframes cursor-draw {
-                0% { top: 30%; left: 30%; }
-                10% { top: 30%; left: 30%; transform: scale(0.9); }
-                60% { top: 70%; left: 70%; transform: scale(0.9); }
-                70% { top: 70%; left: 70%; transform: scale(1); }
-                100% { top: 70%; left: 70%; transform: scale(1); }
-            }
-        `}</style>
-     </div>
-);
-
-const VisualStep3 = () => (
-    <div className="relative w-full h-full bg-court-green/20 overflow-hidden border border-white/5 rounded-xl flex items-center justify-center">
-       <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+const VisualShuttleSnap = () => (
+    <div className={`relative w-full h-full ${COURT_BG} overflow-hidden border border-white/5 rounded-xl flex items-center justify-center`}>
+       <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
        
-       {/* Player Source */}
-       <div className="absolute top-1/2 left-1/3 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
-            <span className="material-symbols-outlined text-6xl text-blue-600 drop-shadow-xl z-10 relative" style={{ fontVariationSettings: "'FILL' 1" }}>accessibility_new</span>
-            {/* Long Press Indicator Ring */}
-            <div className="absolute w-20 h-20 rounded-full border-4 border-white opacity-0 animate-long-press-ring"></div>
+       {/* Player Target */}
+       <div className="relative flex flex-col items-center justify-center">
+            <span className="material-symbols-outlined text-6xl text-blue-600 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)] z-10" style={{ fontVariationSettings: "'FILL' 1" }}>{PLAYER_ICON}</span>
+            {/* Snap Zone Visualizer */}
+            <div className="absolute w-20 h-20 rounded-full border border-white/20 bg-white/5 animate-pulse"></div>
        </div>
 
-       {/* Ghost */}
-       <div className="absolute top-1/2 left-1/3 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center animate-ghost-move opacity-0 z-0">
-            <span className="material-symbols-outlined text-6xl text-blue-600/50 drop-shadow-xl" style={{ fontVariationSettings: "'FILL' 1" }}>accessibility_new</span>
-       </div>
-
-       {/* Dashed Line */}
-       <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
-           <line x1="33%" y1="50%" x2="66%" y2="50%" stroke="#2563eb" strokeWidth="3" strokeDasharray="6,6" className="opacity-0 animate-ghost-line" />
-       </svg>
-       
-       <div className="absolute z-20 animate-cursor-long-press">
-            <span className="material-symbols-outlined text-white drop-shadow-md text-3xl">touch_app</span>
+       {/* Shuttle Draggable */}
+       <div className="absolute z-30 animate-shuttle-snap">
+             <div className="rotate-45 drop-shadow-lg w-8 h-8">
+                <svg viewBox="0 0 24 24" className="w-full h-full fill-white">
+                    <path d="M8 19C8 21.2 9.8 23 12 23C14.2 23 16 21.2 16 19H8Z" />
+                    <path d="M16 18L19.5 4L16.5 4L14.5 12L13.5 4L10.5 4L9.5 12L7.5 4L4.5 4L8 18H16Z" />
+                    <path d="M6 10H18" stroke="black" strokeWidth="1" strokeOpacity="0.3" />
+                    <path d="M7 14H17" stroke="black" strokeWidth="1" strokeOpacity="0.3" />
+                </svg>
+             </div>
+             <span className="material-symbols-outlined absolute top-4 left-4 text-white drop-shadow-md text-2xl" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{CURSOR_ICON}</span>
        </div>
 
        <style>{`
-            .animate-long-press-ring { animation: long-press-ring 4s infinite; }
-            .animate-ghost-move { animation: ghost-move 4s infinite; }
-            .animate-ghost-line { animation: ghost-line-appear 4s infinite; }
-            .animate-cursor-long-press { animation: cursor-long-press 4s infinite; }
-
-            @keyframes cursor-long-press {
-                0% { top: 50%; left: 33%; transform: translate(0,0); }
-                10% { transform: translate(0,0) scale(0.9); } /* Press */
-                35% { transform: translate(0,0) scale(0.9); } /* Hold */
-                60% { top: 50%; left: 66%; transform: translate(0,0) scale(0.9); } /* Drag */
-                70% { top: 50%; left: 66%; transform: translate(0,0) scale(1); } /* Release */
-                100% { top: 50%; left: 66%; }
+            @keyframes shuttle-snap {
+                0% { top: 20%; left: 20%; transform: translate(0,0); }
+                40% { top: 40%; left: 40%; transform: translate(0,0); } /* Approach */
+                50% { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8); } /* Snap! */
+                80% { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8); }
+                100% { top: 20%; left: 20%; transform: translate(0,0); }
             }
-            @keyframes long-press-ring {
-                0%, 10% { opacity: 0; transform: scale(0.5); }
-                30% { opacity: 1; transform: scale(1.1); }
-                31% { opacity: 0; }
-                100% { opacity: 0; }
-            }
-            @keyframes ghost-move {
-                0%, 35% { opacity: 0; left: 33%; }
-                36% { opacity: 0.5; left: 33%; }
-                60%, 100% { opacity: 0.5; left: 66%; }
-            }
-            @keyframes ghost-line-appear {
-                0%, 35% { opacity: 0; x2: 33%; }
-                36% { opacity: 1; }
-                60%, 100% { opacity: 1; x2: 66%; }
-            }
+            .animate-shuttle-snap { animation: shuttle-snap 4s infinite ease-in-out; }
        `}</style>
     </div>
 );
 
-const VisualStep4 = () => (
-    <div className="relative w-full h-full bg-[#1c2620] overflow-hidden border border-white/5 rounded-xl flex flex-col items-center justify-center gap-6">
+const VisualLineDraw = () => (
+     <div className={`relative w-full h-full ${COURT_BG} overflow-hidden border border-white/5 rounded-xl`}>
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
         
-        {/* Mock Lock Button */}
-        <div className="w-20 h-20 rounded-2xl border-2 flex items-center justify-center transition-all duration-300 animate-lock-btn shadow-xl">
-             <span className="material-symbols-outlined text-4xl animate-lock-icon transition-opacity">lock_open</span>
-        </div>
-
-        <div className="text-white/50 font-bold text-lg animate-lock-text tracking-widest">UNLOCKED</div>
+        {/* Drawn Line */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+            <defs>
+                <marker id="arrowhead-yellow" markerHeight="4" markerWidth="6" orient="auto" refX="5" refY="2">
+                    <polygon fill="#facc15" points="0 0, 6 2, 0 4"></polygon>
+                </marker>
+            </defs>
+            <line 
+                x1="30%" y1="70%" 
+                x2="70%" y2="30%" 
+                stroke="#facc15" 
+                strokeWidth="4" 
+                strokeLinecap="round"
+                markerEnd="url(#arrowhead-yellow)"
+                className="animate-draw-line"
+            />
+            {/* Start Dot */}
+            <circle cx="30%" cy="70%" r="4" fill="#facc15" className="animate-draw-dots" />
+        </svg>
 
         {/* Cursor */}
-        <div className="absolute z-20 animate-cursor-lock">
-             <span className="material-symbols-outlined text-white drop-shadow-md text-3xl">touch_app</span>
+        <div className="absolute z-20 animate-cursor-draw">
+             <span className="material-symbols-outlined text-white drop-shadow-md text-3xl" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{CURSOR_ICON}</span>
         </div>
 
-         {/* Overlays for state change */}
-         <div className="absolute top-[calc(50%-40px)] w-20 h-20 flex items-center justify-center animate-lock-overlay pointer-events-none">
-             <span className="material-symbols-outlined text-4xl text-rose-500">lock</span>
-         </div>
-         <div className="absolute top-[calc(50%+48px)] w-full text-center font-bold text-lg text-rose-500 animate-lock-text-overlay tracking-widest pointer-events-none">LOCKED</div>
+        <style>{`
+            @keyframes draw-line {
+                0% { stroke-dasharray: 1000; stroke-dashoffset: 1000; opacity: 0; }
+                10% { stroke-dasharray: 1000; stroke-dashoffset: 1000; opacity: 1; }
+                60% { stroke-dasharray: 1000; stroke-dashoffset: 0; opacity: 1; }
+                100% { stroke-dasharray: 1000; stroke-dashoffset: 0; opacity: 1; }
+            }
+            @keyframes draw-dots {
+                0%, 10% { opacity: 0; }
+                11% { opacity: 1; }
+                100% { opacity: 1; }
+            }
+            @keyframes cursor-draw {
+                0% { top: 70%; left: 30%; transform: translate(-10%, -10%); opacity: 0; }
+                10% { top: 70%; left: 30%; transform: translate(-10%, -10%); opacity: 1; }
+                60% { top: 30%; left: 70%; transform: translate(-10%, -10%); opacity: 1; }
+                80% { top: 30%; left: 70%; transform: translate(-10%, -10%); opacity: 1; }
+                100% { top: 30%; left: 70%; transform: translate(-10%, -10%); opacity: 0; }
+            }
+            .animate-draw-line { animation: draw-line 3s infinite ease-in-out; }
+            .animate-draw-dots { animation: draw-dots 3s infinite ease-in-out; }
+            .animate-cursor-draw { animation: cursor-draw 3s infinite ease-in-out; }
+        `}</style>
+     </div>
+);
+
+const VisualDelete = () => (
+    <div className={`relative w-full h-full ${COURT_BG} overflow-hidden border border-white/5 rounded-xl flex flex-col items-center justify-center gap-6`}>
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+
+        {/* Item to be deleted */}
+        <div className="absolute animate-delete-item flex flex-col items-center">
+            <span className="material-symbols-outlined text-6xl text-red-600 drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]" style={{ fontVariationSettings: "'FILL' 1" }}>{PLAYER_ICON}</span>
+            <span className="text-white font-bold drop-shadow-md mt-1">P1</span>
+        </div>
+
+        {/* Cursor Double Click */}
+        <div className="absolute z-20 animate-double-click">
+             <span className="material-symbols-outlined text-white drop-shadow-md text-3xl" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{CURSOR_ICON}</span>
+             <div className="absolute inset-0 rounded-full border-2 border-white opacity-0 animate-click-ring"></div>
+             <div className="absolute inset-0 rounded-full border-2 border-white opacity-0 animate-click-ring delay-150"></div>
+        </div>
 
         <style>{`
-            .animate-lock-btn { animation: lock-btn-state 4s infinite; }
-            .animate-lock-icon { animation: lock-icon-hide 4s infinite; }
-            .animate-lock-text { animation: lock-icon-hide 4s infinite; }
-            .animate-cursor-lock { animation: cursor-lock-move 4s infinite; }
-            .animate-lock-overlay { animation: lock-overlay-opacity 4s infinite; opacity: 0; }
-            .animate-lock-text-overlay { animation: lock-overlay-opacity 4s infinite; opacity: 0; }
-
-            @keyframes cursor-lock-move {
-                0%, 15% { transform: translate(40px, 40px); opacity: 0; }
-                20% { transform: translate(0, 0); opacity: 1; } /* Arrive */
-                25% { transform: scale(0.9); } /* Click */
-                30% { transform: scale(1); opacity: 0; } /* Leave */
+            @keyframes double-click-move {
+                0% { transform: translate(30px, 30px); opacity: 0; }
+                20% { transform: translate(30px, 30px); opacity: 1; }
+                30% { transform: translate(0, 0); opacity: 1; }
+                40% { transform: scale(0.9); } /* Click 1 */
+                50% { transform: scale(1); }
+                60% { transform: scale(0.9); } /* Click 2 */
+                80% { opacity: 1; }
                 100% { opacity: 0; }
             }
 
-            @keyframes lock-btn-state {
-                0%, 25% { background-color: transparent; border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.5); }
-                26% { transform: scale(0.95); }
-                30%, 80% { background-color: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.6); color: #f43f5e; transform: scale(1); }
-                100% { background-color: transparent; border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.5); }
-            }
-
-            @keyframes lock-overlay-opacity {
-                 0%, 29% { opacity: 0; }
-                 30%, 80% { opacity: 1; }
-                 81%, 100% { opacity: 0; }
+            @keyframes delete-vanish {
+                0%, 60% { transform: scale(1); opacity: 1; }
+                65% { transform: scale(1.1); opacity: 1; }
+                75% { transform: scale(0); opacity: 0; }
+                100% { transform: scale(0); opacity: 0; }
             }
             
-            @keyframes lock-icon-hide {
-                0%, 29% { opacity: 1; }
-                30%, 80% { opacity: 0; }
-                81%, 100% { opacity: 1; }
+            @keyframes click-ring {
+                0%, 40% { opacity: 0; transform: scale(0.5); }
+                41% { opacity: 1; transform: scale(1); }
+                60% { opacity: 0; transform: scale(1.5); }
+                100% { opacity: 0; }
             }
+            .animate-delete-item { animation: delete-vanish 3s infinite; }
+            .animate-double-click { animation: double-click-move 3s infinite; }
+            .animate-click-ring { animation: click-ring 3s infinite; }
         `}</style>
     </div>
 );
@@ -255,7 +289,6 @@ const VisualStep4 = () => (
 
 export const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const [dontShowAgain, setDontShowAgain] = useState(false);
 
   // Reset step when opened
   useEffect(() => {
@@ -268,7 +301,7 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose })
     if (currentStep < TUTORIAL_STEPS.length - 1) {
       setCurrentStep(prev => prev + 1);
     } else {
-      handleClose();
+      onClose();
     }
   };
 
@@ -276,13 +309,6 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose })
     if (currentStep > 0) {
       setCurrentStep(prev => prev - 1);
     }
-  };
-
-  const handleClose = () => {
-    if (dontShowAgain) {
-      localStorage.setItem('bsb_tutorial_seen', 'true');
-    }
-    onClose();
   };
 
   const step = TUTORIAL_STEPS[currentStep];
@@ -307,11 +333,11 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose })
             
             {/* Visual Container */}
             <div className="w-full h-64 mb-8 shadow-2xl">
-                {currentStep === 0 && <VisualStep0 />}
-                {currentStep === 1 && <VisualStep1 />}
-                {currentStep === 2 && <VisualStep2 />}
-                {currentStep === 3 && <VisualStep3 />}
-                {currentStep === 4 && <VisualStep4 />}
+                {currentStep === 0 && <VisualFormation />}
+                {currentStep === 1 && <VisualMarkerDrag />}
+                {currentStep === 2 && <VisualShuttleSnap />}
+                {currentStep === 3 && <VisualLineDraw />}
+                {currentStep === 4 && <VisualDelete />}
             </div>
 
             <h2 className="text-2xl font-display font-bold text-white mb-3 animate-in slide-in-from-bottom-2 fade-in duration-500 key={step.title}">
@@ -327,22 +353,11 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose })
         {/* Footer Controls */}
         <div className="p-6 bg-[#0d120f]/50 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
             
-            {/* Checkbox */}
-            <label className="flex items-center gap-3 cursor-pointer group">
-              <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${dontShowAgain ? 'bg-primary border-primary' : 'border-white/20 group-hover:border-white/40'}`}>
-                {dontShowAgain && <span className="material-symbols-outlined text-sidebar-dark text-sm font-bold">check</span>}
-              </div>
-              <input 
-                type="checkbox" 
-                className="hidden"
-                checked={dontShowAgain}
-                onChange={(e) => setDontShowAgain(e.target.checked)}
-              />
-              <span className="text-sm text-white/50 group-hover:text-white/80 transition-colors">Don't show this again</span>
-            </label>
+            {/* Empty spacer for alignment */}
+            <div className="hidden md:block w-32"></div>
 
             {/* Buttons */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="flex items-center gap-3 w-full md:w-auto justify-center">
                {currentStep > 0 && (
                  <button 
                    onClick={handlePrev}
@@ -356,15 +371,18 @@ export const TutorialModal: React.FC<TutorialModalProps> = ({ isOpen, onClose })
                  onClick={handleNext}
                  className="flex-1 md:flex-none px-8 py-3 rounded-xl bg-primary text-sidebar-dark hover:bg-primary/90 transition-all font-bold text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
                >
-                 {currentStep === TUTORIAL_STEPS.length - 1 ? "Get Started" : "Next"}
+                 {currentStep === TUTORIAL_STEPS.length - 1 ? "Got it" : "Next"}
                  {currentStep < TUTORIAL_STEPS.length - 1 && <span className="material-symbols-outlined text-sm">arrow_forward</span>}
                </button>
             </div>
+
+             {/* Empty spacer for alignment */}
+             <div className="hidden md:block w-32"></div>
         </div>
 
         {/* Absolute Close */}
         <button 
-          onClick={handleClose}
+          onClick={onClose}
           className="absolute top-4 right-4 p-2 text-white/20 hover:text-white transition-colors z-50"
         >
           <span className="material-symbols-outlined">close</span>
