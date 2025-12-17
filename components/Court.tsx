@@ -399,15 +399,12 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
   // Unified Handler for MouseDown and TouchStart on items
   const handleItemStart = (e: React.MouseEvent | React.TouchEvent, id: string, type: ItemType) => {
     if (isLocked) return;
+    
+    // Check for multi-touch (e.g. pinch to zoom starting on an item)
+    if ('touches' in e && e.touches.length > 1) return;
+
     e.stopPropagation(); 
     
-    // For touch, prevent scrolling
-    if (e.type === 'touchstart') {
-        // We generally want to allow default if zooming, but for dragging items we prevent
-        // However, standard scrolling might be desired if not hitting an item? 
-        // Here we hit an item, so we probably want to drag it.
-    }
-
     const item = items.find(i => i.id === id);
     if (!item) return;
 
@@ -464,6 +461,10 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
 
   const handlePathEndStart = (e: React.MouseEvent | React.TouchEvent, pathId: string) => {
       if (isLocked) return;
+      
+      // Check for multi-touch
+      if ('touches' in e && e.touches.length > 1) return;
+
       e.stopPropagation();
       const pos = getPercentagePos(e);
       const path = paths.find(p => p.id === pathId);
@@ -515,6 +516,10 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
 
   const handleLineBodyStart = (e: React.MouseEvent | React.TouchEvent, line: LineItem) => {
     if (isLocked) return;
+    
+    // Check for multi-touch
+    if ('touches' in e && e.touches.length > 1) return;
+    
     e.stopPropagation();
     const pos = getPercentagePos(e);
     setInteraction({ 
@@ -528,13 +533,22 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
 
   const handleLineHandleStart = (e: React.MouseEvent | React.TouchEvent, id: string, handle: 'start' | 'end') => {
       if (isLocked) return;
+      
+      // Check for multi-touch
+      if ('touches' in e && e.touches.length > 1) return;
+      
       e.stopPropagation();
       setInteraction({ type: handle === 'start' ? 'RESIZE_LINE_START' : 'RESIZE_LINE_END', id });
   };
 
   const handleBackgroundStart = (e: React.MouseEvent | React.TouchEvent) => {
       if (isLocked) return;
-      // Prevent creating lines if pinching/zooming, but hard to detect here.
+      
+      // Check for multi-touch (pinch/zoom)
+      if ('touches' in e && e.touches.length > 1) {
+          return;
+      }
+      
       // Usually background drag is for drawing.
       const pos = getPercentagePos(e);
       setInteraction({ type: 'DRAW_LINE', start: pos });
@@ -566,6 +580,19 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
     const handleMove = (e: MouseEvent | TouchEvent) => {
         if (!internalRef.current || isLocked) return;
         
+        // Handle multi-touch (pinch-zoom) by cancelling custom interactions
+        if ('touches' in e && e.touches.length > 1) {
+            if (interaction.type !== 'IDLE') {
+                 setInteraction({ type: 'IDLE' });
+                 setDrawingLine(null);
+                 if (longPressTimerRef.current) {
+                     clearTimeout(longPressTimerRef.current);
+                     longPressTimerRef.current = null;
+                 }
+            }
+            return;
+        }
+
         if (interaction.type !== 'IDLE') {
              // Critical for touch drag to not scroll
              if (e.cancelable) e.preventDefault(); 
@@ -811,8 +838,8 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
                 onDrop={handleDrop}
                 onMouseDown={handleBackgroundStart}
                 onTouchStart={handleBackgroundStart}
-                className={`relative w-full h-full z-10 court-lines select-none touch-none transition-all duration-500 origin-center ${isLocked ? 'cursor-default' : ''}`}
-                style={{ touchAction: 'none' }}
+                className={`relative w-full h-full z-10 court-lines select-none transition-all duration-500 origin-center ${isLocked ? 'cursor-default' : ''}`}
+                style={{ touchAction: 'manipulation' }}
             >
                 <div 
                     className="absolute inset-0 pointer-events-none z-0 bg-court-green" 
