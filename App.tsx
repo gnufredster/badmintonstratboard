@@ -2,7 +2,7 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { SidebarLeft } from './components/SidebarLeft';
 import { Court } from './components/Court';
-import { FeedbackModal } from './components/FeedbackModal';
+import { AboutModal } from './components/AboutModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { TutorialModal } from './components/TutorialModal';
 import { CourtItem, ItemType, LineItem, LineType, PlayerPath, PlayerColor } from './types';
@@ -55,7 +55,7 @@ const App: React.FC = () => {
   const [activeLineColor, setActiveLineColor] = useState<string>(DEFAULT_LINE_COLOR);
   const [activeLineType, setActiveLineType] = useState<LineType>(DEFAULT_LINE_TYPE);
 
-  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
   
   const [isTutorialOpen, setIsTutorialOpen] = useState(false);
@@ -353,7 +353,7 @@ const App: React.FC = () => {
         onClearAll={handleRequestClear}
         onClearPlayers={handleClearPlayers}
         onClearMarkers={handleClearMarkers}
-        onOpenFeedback={() => setIsFeedbackOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
         playerCount={playerCount}
         markerCount={markerCount}
         shuttleCount={shuttleCount}
@@ -395,9 +395,9 @@ const App: React.FC = () => {
         />
       </main>
 
-      <FeedbackModal 
-        isOpen={isFeedbackOpen} 
-        onClose={() => setIsFeedbackOpen(false)} 
+      <AboutModal 
+        isOpen={isAboutOpen} 
+        onClose={() => setIsAboutOpen(false)} 
       />
 
       <TutorialModal 

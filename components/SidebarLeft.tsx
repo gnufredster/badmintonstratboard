@@ -9,7 +9,7 @@ interface SidebarLeftProps {
   onClearAll: () => void;
   onClearPlayers: () => void;
   onClearMarkers: () => void;
-  onOpenFeedback: () => void;
+  onOpenAbout: () => void;
   playerCount: number;
   markerCount: number;
   shuttleCount?: number;
@@ -38,7 +38,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   onClearAll,
   onClearPlayers,
   onClearMarkers,
-  onOpenFeedback,
+  onOpenAbout,
   playerCount,
   markerCount,
   shuttleCount = 0,
@@ -350,7 +350,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
          {/* Divider */}
          <div className="w-6 md:w-[8vw] h-px bg-white/5 my-0.5"></div>
          
-         {/* Tools: Lock, Tutorial, Feedback */}
+         {/* Tools: Lock, Tutorial, About */}
          <div className="flex flex-wrap justify-center gap-2 md:gap-[1vw]">
              <button 
                 onClick={onToggleLock}
@@ -369,11 +369,11 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
             </button>
 
             <button 
-                onClick={onOpenFeedback}
+                onClick={onOpenAbout}
                 className="w-8 h-8 md:w-[3.5vw] md:h-[3.5vw] rounded-lg bg-[#1c2620] text-white/50 hover:text-primary hover:bg-[#1c2620]/80 transition-all flex items-center justify-center"
-                title="Send Feedback"
+                title="About"
             >
-                <span className="material-symbols-outlined text-lg md:text-[2vw]">chat_bubble</span>
+                <span className="material-symbols-outlined text-lg md:text-[2vw]">info</span>
             </button>
          </div>
       </div>
