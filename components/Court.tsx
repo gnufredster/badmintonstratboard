@@ -134,6 +134,7 @@ const EditableLabel = ({ value, onChange, className, style, disabled }: { value:
               onClick={e => e.stopPropagation()} 
               onDoubleClick={e => e.stopPropagation()}
               onMouseDown={e => e.stopPropagation()}
+              onTouchStart={e => e.stopPropagation()}
             />
         );
     }
@@ -181,8 +182,36 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
   // Wrapper ref for screenshot (includes stands)
   const wrapperRef = useRef<HTMLDivElement>(null);
   
-  // Expose the wrapper ref to the parent for screenshots
-  useImperativeHandle(ref, () => wrapperRef.current!);
+  // Expose methods for mobile drops
+  useImperativeHandle(ref, () => {
+    const node = wrapperRef.current as any;
+    if (node) {
+        node.handleMobileDrop = (type: ItemType, clientX: number, clientY: number) => {
+             if (!internalRef.current || isLocked) return;
+             
+             // Calculate if drop is inside internal grid
+             const rect = internalRef.current.getBoundingClientRect();
+             if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+                 return;
+             }
+
+             const xPercent = ((clientX - rect.left) / rect.width) * 100;
+             const yPercent = ((clientY - rect.top) / rect.height) * 100;
+
+             let finalX = snapToGrid(xPercent, false);
+             let finalY = snapToGrid(yPercent, true);
+
+             if (type === ItemType.SHUTTLE) {
+                const snap = getSnapPosition(xPercent, yPercent);
+                finalX = snap.x;
+                finalY = snap.y;
+             }
+
+             onDropItem(type, finalX, finalY);
+        };
+    }
+    return wrapperRef.current!;
+  });
 
   const [interaction, setInteraction] = useState<InteractionMode>({ type: 'IDLE' });
   const [drawingLine, setDrawingLine] = useState<{start: {x: number, y: number}, end: {x: number, y: number}} | null>(null);
@@ -232,11 +261,26 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
     return meta;
   }, [paths]);
 
-  const getPercentagePos = (e: MouseEvent | React.MouseEvent) => {
+  const getPercentagePos = (e: MouseEvent | React.MouseEvent | TouchEvent | React.TouchEvent) => {
       if (!internalRef.current) return { x: 0, y: 0 };
       const rect = internalRef.current.getBoundingClientRect();
-      let x = ((e.clientX - rect.left) / rect.width) * 100;
-      let y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      let clientX, clientY;
+      if ('touches' in e && e.touches.length > 0) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+      } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+          clientX = e.changedTouches[0].clientX;
+          clientY = e.changedTouches[0].clientY;
+      } else {
+          // @ts-ignore
+          clientX = e.clientX;
+          // @ts-ignore
+          clientY = e.clientY;
+      }
+
+      let x = ((clientX - rect.left) / rect.width) * 100;
+      let y = ((clientY - rect.top) / rect.height) * 100;
       return {
           x: Math.max(0, Math.min(100, x)),
           y: Math.max(0, Math.min(100, y))
@@ -352,14 +396,31 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
     }
   };
 
-  const handleItemMouseDown = (e: React.MouseEvent, id: string, type: ItemType) => {
+  // Unified Handler for MouseDown and TouchStart on items
+  const handleItemStart = (e: React.MouseEvent | React.TouchEvent, id: string, type: ItemType) => {
     if (isLocked) return;
     e.stopPropagation(); 
     
+    // For touch, prevent scrolling
+    if (e.type === 'touchstart') {
+        // We generally want to allow default if zooming, but for dragging items we prevent
+        // However, standard scrolling might be desired if not hitting an item? 
+        // Here we hit an item, so we probably want to drag it.
+    }
+
     const item = items.find(i => i.id === id);
     if (!item) return;
 
-    const initialMousePos = { x: e.clientX, y: e.clientY };
+    let clientX, clientY;
+    if ('touches' in e) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else {
+        clientX = (e as React.MouseEvent).clientX;
+        clientY = (e as React.MouseEvent).clientY;
+    }
+
+    const initialMousePos = { x: clientX, y: clientY };
     const initialItemPos = { ...item.position };
 
     // Reset attached shuttles
@@ -370,13 +431,12 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         longPressTimerRef.current = setTimeout(() => {
             setInteraction({ type: 'CREATING_PATH', sourceId: id, sourceType: 'PLAYER', currentEnd: pos });
         }, 1000); 
-        setInteraction({ type: 'AWAITING_LONG_PRESS', id, sourceType: 'PLAYER', startX: e.clientX, startY: e.clientY });
+        setInteraction({ type: 'AWAITING_LONG_PRESS', id, sourceType: 'PLAYER', startX: clientX, startY: clientY });
 
         // Find attached shuttles to move together
-        // We define "attached" as being very close to the snap positions of this player
         const HAND_OFFSET_X = 4;
         const HAND_OFFSET_Y = -1.5;
-        const ATTACH_THRESHOLD = 1; // Strict threshold for attachment
+        const ATTACH_THRESHOLD = 1; 
 
         const lhX = item.position.x - HAND_OFFSET_X;
         const lhY = item.position.y + HAND_OFFSET_Y;
@@ -402,14 +462,23 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
     }
   };
 
-  const handlePathEndMouseDown = (e: React.MouseEvent, pathId: string) => {
+  const handlePathEndStart = (e: React.MouseEvent | React.TouchEvent, pathId: string) => {
       if (isLocked) return;
       e.stopPropagation();
       const pos = getPercentagePos(e);
       const path = paths.find(p => p.id === pathId);
       if (!path) return;
       
-      const initialMousePos = { x: e.clientX, y: e.clientY };
+      let clientX, clientY;
+      if ('touches' in e) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+      } else {
+          clientX = (e as React.MouseEvent).clientX;
+          clientY = (e as React.MouseEvent).clientY;
+      }
+
+      const initialMousePos = { x: clientX, y: clientY };
       const initialEndPos = { ...path.endPosition };
 
       // Find attached shuttles for Ghost Player
@@ -441,10 +510,10 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         setInteraction({ type: 'CREATING_PATH', sourceId: pathId, sourceType: 'PATH', currentEnd: pos });
       }, 1000); 
 
-      setInteraction({ type: 'AWAITING_LONG_PRESS', id: pathId, sourceType: 'PATH', startX: e.clientX, startY: e.clientY });
+      setInteraction({ type: 'AWAITING_LONG_PRESS', id: pathId, sourceType: 'PATH', startX: clientX, startY: clientY });
   };
 
-  const handleLineBodyMouseDown = (e: React.MouseEvent, line: LineItem) => {
+  const handleLineBodyStart = (e: React.MouseEvent | React.TouchEvent, line: LineItem) => {
     if (isLocked) return;
     e.stopPropagation();
     const pos = getPercentagePos(e);
@@ -457,14 +526,16 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
     });
   };
 
-  const handleLineHandleMouseDown = (e: React.MouseEvent, id: string, handle: 'start' | 'end') => {
+  const handleLineHandleStart = (e: React.MouseEvent | React.TouchEvent, id: string, handle: 'start' | 'end') => {
       if (isLocked) return;
       e.stopPropagation();
       setInteraction({ type: handle === 'start' ? 'RESIZE_LINE_START' : 'RESIZE_LINE_END', id });
   };
 
-  const handleBackgroundMouseDown = (e: React.MouseEvent) => {
+  const handleBackgroundStart = (e: React.MouseEvent | React.TouchEvent) => {
       if (isLocked) return;
+      // Prevent creating lines if pinching/zooming, but hard to detect here.
+      // Usually background drag is for drawing.
       const pos = getPercentagePos(e);
       setInteraction({ type: 'DRAW_LINE', start: pos });
       setDrawingLine({ start: pos, end: pos });
@@ -492,16 +563,28 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
   };
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const handleMove = (e: MouseEvent | TouchEvent) => {
         if (!internalRef.current || isLocked) return;
-        const pos = getPercentagePos(e);
-
+        
         if (interaction.type !== 'IDLE') {
-             e.preventDefault(); 
+             // Critical for touch drag to not scroll
+             if (e.cancelable) e.preventDefault(); 
+        }
+
+        const pos = getPercentagePos(e as any);
+        
+        let clientX, clientY;
+        if ('touches' in e) {
+            if (e.touches.length === 0) return;
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = (e as MouseEvent).clientX;
+            clientY = (e as MouseEvent).clientY;
         }
 
         if (interaction.type === 'AWAITING_LONG_PRESS') {
-             const dist = Math.sqrt(Math.pow(e.clientX - interaction.startX, 2) + Math.pow(e.clientY - interaction.startY, 2));
+             const dist = Math.sqrt(Math.pow(clientX - interaction.startX, 2) + Math.pow(clientY - interaction.startY, 2));
              if (dist > 10) {
                  if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
                  if (interaction.sourceType === 'PATH') {
@@ -534,8 +617,8 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         }
         else if (interaction.type === 'DRAG_PATH_END') {
             const rect = internalRef.current.getBoundingClientRect();
-            const deltaX = (e.clientX - interaction.initialMousePos.x) / rect.width * 100;
-            const deltaY = (e.clientY - interaction.initialMousePos.y) / rect.height * 100;
+            const deltaX = (clientX - interaction.initialMousePos.x) / rect.width * 100;
+            const deltaY = (clientY - interaction.initialMousePos.y) / rect.height * 100;
             const newPos = {
                 x: snapToGrid(interaction.initialEndPos.x + deltaX, false),
                 y: snapToGrid(interaction.initialEndPos.y + deltaY, true)
@@ -556,8 +639,8 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         }
         else if (interaction.type === 'DRAG_ITEM') {
             const rect = internalRef.current.getBoundingClientRect();
-            const deltaX = (e.clientX - interaction.initialMousePos.x) / rect.width * 100;
-            const deltaY = (e.clientY - interaction.initialMousePos.y) / rect.height * 100;
+            const deltaX = (clientX - interaction.initialMousePos.x) / rect.width * 100;
+            const deltaY = (clientY - interaction.initialMousePos.y) / rect.height * 100;
             
             // Calculate raw target position without snapping yet
             const rawX = interaction.initialItemPos.x + deltaX;
@@ -619,7 +702,7 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         }
     };
 
-    const handleMouseUp = (e: MouseEvent) => {
+    const handleEnd = (e: MouseEvent | TouchEvent) => {
         if (isLocked) {
              setInteraction({ type: 'IDLE' });
              setDrawingLine(null);
@@ -634,13 +717,26 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         // Clear attached items
         attachedShuttlesRef.current = [];
 
+        let clientX, clientY;
+        if ('changedTouches' in e) {
+             if (e.changedTouches.length > 0) {
+                clientX = e.changedTouches[0].clientX;
+                clientY = e.changedTouches[0].clientY;
+             } else {
+                clientX = 0; clientY = 0;
+             }
+        } else {
+             clientX = (e as MouseEvent).clientX;
+             clientY = (e as MouseEvent).clientY;
+        }
+
         if (interaction.type === 'DRAG_ITEM' || interaction.type === 'MOVE_LINE') {
             const trashBin = document.getElementById('trash-bin-zone');
             if (trashBin) {
                 const rect = trashBin.getBoundingClientRect();
                 if (
-                    e.clientX >= rect.left && e.clientX <= rect.right && 
-                    e.clientY >= rect.top && e.clientY <= rect.bottom
+                    clientX >= rect.left && clientX <= rect.right && 
+                    clientY >= rect.top && clientY <= rect.bottom
                 ) {
                     if (interaction.type === 'DRAG_ITEM') onDeleteItem(interaction.id);
                     if (interaction.type === 'MOVE_LINE') onDeleteLine(interaction.id);
@@ -653,8 +749,8 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
              if (trashBin && onDeletePath) {
                  const rect = trashBin.getBoundingClientRect();
                  if (
-                     e.clientX >= rect.left && e.clientX <= rect.right && 
-                     e.clientY >= rect.top && e.clientY <= rect.bottom
+                     clientX >= rect.left && clientX <= rect.right && 
+                     clientY >= rect.top && clientY <= rect.bottom
                  ) {
                      onDeletePath(interaction.pathId);
                  }
@@ -677,13 +773,17 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
     };
 
     if (interaction.type !== 'IDLE') {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('mouseup', handleEnd);
+      window.addEventListener('touchmove', handleMove, { passive: false });
+      window.addEventListener('touchend', handleEnd);
     }
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
     };
   }, [interaction, drawingLine, onMoveItem, onMoveItems, onDeleteItem, onCreateLine, onUpdateLine, onDeleteLine, onCreatePath, onUpdatePath, onDeletePath, isLocked, items, paths]);
 
@@ -706,10 +806,13 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
         >
             <div 
                 ref={internalRef}
+                id="court-grid"
                 onDragOver={handleDragOver}
                 onDrop={handleDrop}
-                onMouseDown={handleBackgroundMouseDown}
+                onMouseDown={handleBackgroundStart}
+                onTouchStart={handleBackgroundStart}
                 className={`relative w-full h-full z-10 court-lines select-none touch-none transition-all duration-500 origin-center ${isLocked ? 'cursor-default' : ''}`}
+                style={{ touchAction: 'none' }}
             >
                 <div 
                     className="absolute inset-0 pointer-events-none z-0 bg-court-green" 
@@ -840,13 +943,16 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
                                             x1={`${line.start.x}%`} y1={`${line.start.y}%`} 
                                             x2={`${line.end.x}%`} y2={`${line.end.y}%`}
                                             stroke="transparent" strokeWidth={lineHandleSizePx} className="cursor-move"
-                                            onMouseDown={(e) => handleLineBodyMouseDown(e, line)}
+                                            onMouseDown={(e) => handleLineBodyStart(e, line)}
+                                            onTouchStart={(e) => handleLineBodyStart(e, line)}
                                             onDoubleClick={(e) => { e.stopPropagation(); onDeleteLine(line.id); }}
                                         />
                                         <circle cx={`${line.start.x}%`} cy={`${line.start.y}%`} r={12 * scale} fill="transparent" className="cursor-grab active:cursor-grabbing"
-                                            onMouseDown={(e) => handleLineHandleMouseDown(e, line.id, 'start')} />
+                                            onMouseDown={(e) => handleLineHandleStart(e, line.id, 'start')}
+                                            onTouchStart={(e) => handleLineHandleStart(e, line.id, 'start')} />
                                         <circle cx={`${line.end.x}%`} cy={`${line.end.y}%`} r={12 * scale} fill="transparent" className="cursor-grab active:cursor-grabbing"
-                                            onMouseDown={(e) => handleLineHandleMouseDown(e, line.id, 'end')} />
+                                            onMouseDown={(e) => handleLineHandleStart(e, line.id, 'end')} 
+                                            onTouchStart={(e) => handleLineHandleStart(e, line.id, 'end')} />
                                     </>
                                 )}
                             </g>
@@ -911,7 +1017,8 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
                                     width: ghostSizePx,
                                     height: ghostSizePx,
                                 }}
-                                onMouseDown={(e) => !isLocked && handlePathEndMouseDown(e, path.id)}
+                                onMouseDown={(e) => !isLocked && handlePathEndStart(e, path.id)}
+                                onTouchStart={(e) => !isLocked && handlePathEndStart(e, path.id)}
                                 onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeletePath && onDeletePath(path.id); } }}
                             >
                                 <div className="relative flex items-center justify-center">
@@ -1069,7 +1176,8 @@ export const Court = forwardRef<HTMLDivElement, CourtProps>(({
                                 width: item.type === ItemType.SHUTTLE ? shuttleSizePx : itemSizePx,
                                 height: item.type === ItemType.SHUTTLE ? shuttleSizePx : itemSizePx,
                             }}
-                            onMouseDown={(e) => handleItemMouseDown(e, item.id, item.type)}
+                            onMouseDown={(e) => handleItemStart(e, item.id, item.type)}
+                            onTouchStart={(e) => handleItemStart(e, item.id, item.type)}
                             onDoubleClick={(e) => { if (!isLocked) { e.stopPropagation(); onDeleteItem(item.id); } }}
                         >
                             {content}

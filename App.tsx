@@ -165,6 +165,16 @@ const App: React.FC = () => {
     setDraggedType(null);
   }, [isLocked]);
 
+  const handleMobileDropItem = useCallback((type: ItemType, clientX: number, clientY: number) => {
+      if (courtRef.current) {
+          // @ts-ignore - method attached in Court.tsx useImperativeHandle
+          if (typeof courtRef.current.handleMobileDrop === 'function') {
+               // @ts-ignore
+               courtRef.current.handleMobileDrop(type, clientX, clientY);
+          }
+      }
+  }, []);
+
   const handleMoveItem = useCallback((id: string, x: number, y: number) => {
     if (isLocked) return;
     setItems(prev => prev.map(item => 
@@ -359,6 +369,7 @@ const App: React.FC = () => {
         onUpdateStrategyName={setStrategyName}
         onOpenTutorial={() => setIsTutorialOpen(true)}
         onApplyPreset={handleApplyPreset}
+        onMobileDropItem={handleMobileDropItem}
       />
       
       <main className="flex-grow flex flex-col relative transition-all duration-300">

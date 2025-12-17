@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ItemType, LineType } from '../types';
 import { MAX_PLAYERS, MAX_MARKERS, MAX_SHUTTLES, LINE_COLORS } from '../constants';
 
@@ -25,6 +25,7 @@ interface SidebarLeftProps {
   onUpdateStrategyName: (name: string) => void;
   onOpenTutorial: () => void;
   onApplyPreset: (presetKey: string) => void;
+  onMobileDropItem: (type: ItemType, clientX: number, clientY: number) => void;
 }
 
 type GameType = 'SINGLES' | 'DOUBLES';
@@ -53,12 +54,16 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   onUpdateStrategyName,
   onOpenTutorial,
   onApplyPreset,
+  onMobileDropItem
 }) => {
   
   // Initialize with DOUBLES to match App.tsx preset
   const [gameType, setGameType] = useState<GameType>('DOUBLES');
   const [situation, setSituation] = useState<Situation>('SERVE');
   const [side, setSide] = useState<Side>('EVEN');
+  
+  // Mobile Drag State
+  const [touchDragItem, setTouchDragItem] = useState<{ type: ItemType, x: number, y: number } | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -101,6 +106,54 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   // Convert bg- color class to text- color class
   const playerColorClass = nextPlayerColor.replace('bg-', 'text-');
 
+  // Touch handlers for mobile/tablet drag and drop
+  const handleTouchStart = (e: React.TouchEvent, type: ItemType) => {
+      if (isLocked) return;
+      if (type === ItemType.PLAYER && !canAddPlayer) return;
+      if (type === ItemType.MARKER && !canAddMarker) return;
+      if (type === ItemType.SHUTTLE && !canAddShuttle) return;
+
+      const touch = e.touches[0];
+      setTouchDragItem({
+          type,
+          x: touch.clientX,
+          y: touch.clientY
+      });
+  };
+
+  useEffect(() => {
+      const handleTouchMove = (e: TouchEvent) => {
+          if (touchDragItem) {
+              e.preventDefault(); // Prevent scrolling while dragging
+              const touch = e.touches[0];
+              setTouchDragItem(prev => prev ? { ...prev, x: touch.clientX, y: touch.clientY } : null);
+          }
+      };
+
+      const handleTouchEnd = (e: TouchEvent) => {
+          if (touchDragItem) {
+              // Get the last known position (from state, or from changedTouches)
+              const touch = e.changedTouches[0];
+              const finalX = touch ? touch.clientX : touchDragItem.x;
+              const finalY = touch ? touch.clientY : touchDragItem.y;
+              
+              onMobileDropItem(touchDragItem.type, finalX, finalY);
+              setTouchDragItem(null);
+          }
+      };
+
+      if (touchDragItem) {
+          window.addEventListener('touchmove', handleTouchMove, { passive: false });
+          window.addEventListener('touchend', handleTouchEnd);
+      }
+
+      return () => {
+          window.removeEventListener('touchmove', handleTouchMove);
+          window.removeEventListener('touchend', handleTouchEnd);
+      };
+  }, [touchDragItem, onMobileDropItem]);
+
+
   // Toggle Button Component
   const ToggleButton = ({ 
       active, 
@@ -123,6 +176,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   );
 
   return (
+    <>
     <aside className="w-14 md:w-[15vw] flex-shrink-0 flex flex-col bg-sidebar-dark border-r border-white/5 h-full z-20 custom-scrollbar relative shadow-2xl transition-all duration-300 select-none">
       {/* Header */}
       <div className="p-2 md:py-[1.5vw] flex flex-col items-center justify-center border-b border-white/5 md:gap-[0.5vw]">
@@ -206,6 +260,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
           className={`w-full flex flex-col items-center group transition-all ${canAddShuttle ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'opacity-40 cursor-not-allowed filter grayscale'}`}
           draggable={canAddShuttle}
           onDragStart={(e) => canAddShuttle && onDragStart(e, ItemType.SHUTTLE)}
+          onTouchStart={(e) => canAddShuttle && handleTouchStart(e, ItemType.SHUTTLE)}
           title="Drag to add Shuttle"
         >
            <div className="relative p-1 flex items-center justify-center">
@@ -226,6 +281,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
           className={`w-full flex flex-col items-center group transition-all ${canAddPlayer ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'opacity-40 cursor-not-allowed filter grayscale'}`}
           draggable={canAddPlayer}
           onDragStart={(e) => canAddPlayer && onDragStart(e, ItemType.PLAYER)}
+          onTouchStart={(e) => canAddPlayer && handleTouchStart(e, ItemType.PLAYER)}
           onDoubleClick={() => !isLocked && onClearPlayers()}
           title="Drag to add Player"
         >
@@ -242,6 +298,7 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
           className={`w-full flex flex-col items-center group transition-all ${canAddMarker ? 'cursor-grab active:cursor-grabbing hover:scale-110' : 'opacity-40 cursor-not-allowed filter grayscale'}`}
           draggable={canAddMarker}
           onDragStart={(e) => canAddMarker && onDragStart(e, ItemType.MARKER)}
+          onTouchStart={(e) => canAddMarker && handleTouchStart(e, ItemType.MARKER)}
           onDoubleClick={() => !isLocked && onClearMarkers()}
           title="Drag to add Marker"
         >
@@ -352,5 +409,37 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
         </div>
       </div>
     </aside>
+
+    {/* Touch Drag Ghost Element */}
+    {touchDragItem && (
+        <div 
+            className="fixed z-50 pointer-events-none"
+            style={{
+                left: touchDragItem.x,
+                top: touchDragItem.y,
+                transform: 'translate(-50%, -50%)'
+            }}
+        >
+            {touchDragItem.type === ItemType.PLAYER && (
+                <span className={`material-symbols-outlined text-4xl drop-shadow-xl ${playerColorClass}`} style={{ fontVariationSettings: "'FILL' 1" }}>
+                    accessibility_new
+                </span>
+            )}
+            {touchDragItem.type === ItemType.MARKER && (
+                <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center shadow-lg border border-gray-300">
+                    <span className="text-black font-bold text-[10px]">{nextMarkerLabel}</span>
+                </div>
+            )}
+            {touchDragItem.type === ItemType.SHUTTLE && (
+                 <div className="w-6 h-6 flex items-center justify-center drop-shadow-xl rotate-45">
+                     <svg viewBox="0 0 24 24" className="w-full h-full fill-white">
+                        <path d="M8 19C8 21.2 9.8 23 12 23C14.2 23 16 21.2 16 19H8Z" />
+                        <path d="M16 18L19.5 4L16.5 4L14.5 12L13.5 4L10.5 4L9.5 12L7.5 4L4.5 4L8 18H16Z" />
+                     </svg>
+                 </div>
+            )}
+        </div>
+    )}
+    </>
   );
 };
