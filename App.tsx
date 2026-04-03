@@ -1,5 +1,6 @@
 
 import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { SidebarLeft } from './components/SidebarLeft';
 import { Court } from './components/Court';
 import { AboutModal } from './components/AboutModal';
@@ -412,6 +413,7 @@ const App: React.FC = () => {
         title="Clear Court?"
         message="This will remove all players, markers, and lines from the court. This action cannot be undone."
       />
+      <Analytics />
     </div>
   );
 };
